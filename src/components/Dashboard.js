@@ -24,6 +24,7 @@ function Dashboard() {
     totalRevenue: 0,
     overdueRentals: 0,
     availableEquipment: 0,
+    availableEquipmentQuantity: 0,
     trends: {
       totalClients: '0%',
       totalEquipment: '0%',
@@ -98,6 +99,49 @@ function Dashboard() {
         console.log(`Dashboard: Recent rentals loaded in ${rentalsEnd - rentalsStart}ms`);
         setRecentRentals(recentRentalsData);
 
+        // Fetch all rentals to recalculate active count
+        console.log('Dashboard: Fetching all rentals for active count recalculation');
+        const allRentalsStart = performance.now();
+        const allRentalsPromise = ipc.invoke('db-get-rentals');
+        const allRentalsTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('All rentals timeout')), 5000)
+        );
+        const allRentalsData = await Promise.race([allRentalsPromise, allRentalsTimeout]);
+        const allRentalsEnd = performance.now();
+        console.log(`Dashboard: All rentals loaded in ${allRentalsEnd - allRentalsStart}ms`);
+
+        // Recalculate active rentals count
+        const rentalsArray = allRentalsData.data || allRentalsData || [];
+        const activeRentalsCount = (Array.isArray(rentalsArray) ? rentalsArray : []).filter(rental => rental.status === 'active').length;
+
+        // Update stats with recalculated active rentals count
+        setStats(prevStats => ({
+          ...prevStats,
+          activeRentals: activeRentalsCount
+        }));
+
+        // Fetch equipment to calculate total available quantity
+        console.log('Dashboard: Fetching equipment for quantity calculation');
+        const equipmentStart = performance.now();
+        const equipmentPromise = ipc.invoke('db-get-equipment');
+        const equipmentTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Equipment data timeout')), 5000)
+        );
+        const equipmentData = await Promise.race([equipmentPromise, equipmentTimeout]);
+        const equipmentEnd = performance.now();
+        console.log(`Dashboard: Equipment loaded in ${equipmentEnd - equipmentStart}ms`);
+
+        // Calculate total available quantity
+        const totalAvailableQuantity = (equipmentData || []).reduce((sum, item) => {
+          return sum + (item.status === 'available' ? (item.quantity_available || 0) : 0);
+        }, 0);
+
+        // Update stats with calculated quantity
+        setStats(prevStats => ({
+          ...prevStats,
+          availableEquipmentQuantity: totalAvailableQuantity
+        }));
+
         setLoading(false);
         const endTime = performance.now();
         console.log(`Dashboard: Total data load completed in ${endTime - startTime}ms`);
@@ -155,7 +199,7 @@ function Dashboard() {
     },
     {
       title: 'Available Equipment',
-      value: stats.availableEquipment,
+      value: stats.availableEquipmentQuantity,
       icon: CheckCircle,
       color: 'bg-indigo-500',
       textColor: 'text-indigo-600',

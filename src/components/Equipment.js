@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Package, Wrench, CheckCircle, XCircle } from 'lucide-react';
 import { equipmentService } from '../services/equipmentService';
 import { getIpc } from '../utils/electronUtils';
+import { useAuth } from '../contexts/AuthContext';
 
 function Equipment() {
+  const { user } = useAuth();
   const [equipment, setEquipment] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState(null);
@@ -218,12 +220,14 @@ function Equipment() {
                 >
                   <Edit className="h-4 w-4" />
                 </button>
-                <button
-                  onClick={() => handleDeleteEquipment(item.id)}
-                  className="text-red-600 hover:text-red-900"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {user?.role === 'admin' && (
+                  <button
+                    onClick={() => handleDeleteEquipment(item.id)}
+                    className="text-red-600 hover:text-red-900"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
               
               <select

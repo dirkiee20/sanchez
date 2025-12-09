@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { clientService } from '../services/clientService';
 import { getIpc } from '../utils/electronUtils';
 import Pagination from './Pagination';
+import { useAuth } from '../contexts/AuthContext';
 
 function Clients() {
+  const { user } = useAuth();
   const [clients, setClients] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
@@ -213,13 +215,15 @@ function Clients() {
                       >
                         <FileText className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={() => handleDeleteClient(client.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Delete Client"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {user?.role === 'admin' && (
+                        <button
+                          onClick={() => handleDeleteClient(client.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete Client"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

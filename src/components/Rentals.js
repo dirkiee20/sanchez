@@ -5,8 +5,10 @@ import { useLocation } from 'react-router-dom';
 import { rentalService } from '../services/rentalService';
 import { clientService } from '../services/clientService';
 import Pagination from './Pagination';
+import { useAuth } from '../contexts/AuthContext';
 
 function Rentals() {
+  const { user } = useAuth();
   const [rentals, setRentals] = useState([]);
   const [clients, setClients] = useState([]);
   const [availableEquipment, setAvailableEquipment] = useState([]);
@@ -408,13 +410,15 @@ function Rentals() {
                           </button>
                         </>
                       )}
-                      <button
-                        onClick={() => handleDeleteRental(rental.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Delete Rental"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {user?.role === 'admin' && (
+                        <button
+                          onClick={() => handleDeleteRental(rental.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete Rental"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -660,7 +664,7 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [showClientSuggestions, setShowClientSuggestions] = useState(false);
   const [selectedClient, setSelectedClient] = useState(
-    preSelectedClient || (rental?.client_id ? clients.find(c => c.id === rental.client_id) : null)
+    preSelectedClient || (rental?.client_id ? ((Array.isArray(clients) ? clients : clients?.data) || []).find(c => c.id === rental.client_id) : null)
   );
 
   // Initialize client when preSelectedClient is available

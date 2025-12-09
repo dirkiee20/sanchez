@@ -4,8 +4,10 @@ import { useLocation } from 'react-router-dom';
 import { paymentService } from '../services/paymentService';
 import { rentalService } from '../services/rentalService';
 import Pagination from './Pagination';
+import { useAuth } from '../contexts/AuthContext';
 
 function Payments() {
+  const { user } = useAuth();
   const [payments, setPayments] = useState([]);
   const [rentals, setRentals] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -289,12 +291,14 @@ function Payments() {
                         >
                           <Edit className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => handleDeletePayment(payment.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {user?.role === 'admin' && (
+                          <button
+                            onClick={() => handleDeletePayment(payment.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -4,8 +4,10 @@ import { useLocation } from 'react-router-dom';
 import { returnService } from '../services/returnService';
 import { getIpc } from '../utils/electronUtils';
 import Pagination from './Pagination';
+import { useAuth } from '../contexts/AuthContext';
 
 function Returns() {
+  const { user } = useAuth();
   const [returns, setReturns] = useState([]);
   const [activeRentals, setActiveRentals] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -313,12 +315,14 @@ function Returns() {
                       >
                         <Edit className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={() => handleDeleteReturn(returnItem.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {user?.role === 'admin' && (
+                        <button
+                          onClick={() => handleDeleteReturn(returnItem.id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
