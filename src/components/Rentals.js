@@ -115,6 +115,28 @@ function Rentals() {
     }
   };
 
+  const getOvernightCustodyDisplay = (custody) => {
+    switch (custody) {
+      case 'owner':
+        return 'Returns to Office';
+      case 'client':
+        return 'Stays with Client';
+      default:
+        return 'Returns to Office';
+    }
+  };
+
+  const getOvernightCustodyColor = (custody) => {
+    switch (custody) {
+      case 'owner':
+        return 'bg-blue-100 text-blue-800';
+      case 'client':
+        return 'bg-orange-100 text-orange-800';
+      default:
+        return 'bg-blue-100 text-blue-800';
+    }
+  };
+
   const handleAddRental = () => {
     setEditingRental(null);
     setSelectedClient(null);
@@ -332,6 +354,9 @@ function Rentals() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  Condition
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Payment
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
@@ -372,6 +397,11 @@ function Rentals() {
                         {rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
                       </span>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getOvernightCustodyColor(rental.overnight_custody)}`}>
+                      {getOvernightCustodyDisplay(rental.overnight_custody)}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(rental.payment_status)}`}>
@@ -625,7 +655,7 @@ function EquipmentSelectionModal({ equipment, onClose, onSelectEquipment }) {
                     <h3 className="font-medium text-secondary-900">{item.name}</h3>
                     <p className="text-sm text-secondary-600">{item.type}</p>
                     <p className="text-sm text-secondary-600">{item.description}</p>
-                    <p className="text-sm text-green-600 font-medium">₱{item.rate_per_day}/day</p>
+                    <p className="text-sm text-green-600 font-medium">₱{item.rate_per_day}/hour</p>
                   </div>
                   <Package className="h-5 w-5 text-secondary-400" />
                 </div>
@@ -657,7 +687,8 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
     rate_per_day: rental?.rate_per_day || '',
     total_amount: rental?.total_amount || '',
     quantity: rental?.quantity || 1,
-    status: rental?.status || 'active'
+    status: rental?.status || 'active',
+    overnight_custody: rental?.overnight_custody || 'owner'
   });
 
   const [selectedEquipment, setSelectedEquipment] = useState(null);
@@ -944,7 +975,7 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
                           >
                             <div className="font-medium text-secondary-900">{equipment.name}</div>
                             <div className="text-sm text-secondary-600">{equipment.type}</div>
-                            <div className="text-sm text-green-600 font-medium">₱{equipment.rate_per_day}/day</div>
+                            <div className="text-sm text-green-600 font-medium">₱{equipment.rate_per_day}/hour</div>
                           </div>
                         ))}
                       </div>
@@ -962,13 +993,13 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
                 {selectedEquipmentItem && (
                   <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
                     <div className="text-sm font-medium text-blue-800">Selected: {selectedEquipmentItem.name}</div>
-                    <div className="text-xs text-blue-600">{selectedEquipmentItem.type} • ₱{selectedEquipmentItem.rate_per_day}/day</div>
+                    <div className="text-xs text-blue-600">{selectedEquipmentItem.type} • ₱{selectedEquipmentItem.rate_per_day}/hour</div>
                   </div>
                 )}
                 {preSelectedEquipment && !selectedEquipmentItem && (
                   <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
                     <div className="text-sm font-medium text-blue-800">Selected: {preSelectedEquipment.name}</div>
-                    <div className="text-xs text-blue-600">{preSelectedEquipment.type} • ₱{preSelectedEquipment.rate_per_day}/day</div>
+                    <div className="text-xs text-blue-600">{preSelectedEquipment.type} • ₱{preSelectedEquipment.rate_per_day}/hour</div>
                   </div>
                 )}
               </div>
@@ -1049,6 +1080,24 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
                 onChange={handleChange}
                 readOnly
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-secondary-700 mb-1">
+                Overnight Custody
+              </label>
+              <select
+                name="overnight_custody"
+                className="input-field"
+                value={formData.overnight_custody}
+                onChange={handleChange}
+              >
+                <option value="owner">Equipment returns to office each night</option>
+                <option value="client">Equipment stays with client overnight</option>
+              </select>
+              <p className="text-xs text-secondary-500 mt-1">
+                Choose where the equipment will be stored overnight during the rental period
+              </p>
             </div>
 
             <div>

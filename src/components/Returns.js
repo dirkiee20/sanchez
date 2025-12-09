@@ -442,7 +442,7 @@ function RentalSelectionModal({ rentals, onClose, onSelectRental }) {
                     <p className="text-sm text-secondary-500">
                       {new Date(rental.start_date).toLocaleDateString()} - {new Date(rental.end_date).toLocaleDateString()}
                     </p>
-                    <p className="text-sm text-green-600 font-medium">₱{rental.rate_per_day}/day</p>
+                    <p className="text-sm text-green-600 font-medium">₱{rental.rate_per_day}/hour</p>
                   </div>
                   <Package className="h-5 w-5 text-secondary-400" />
                 </div>
@@ -670,7 +670,7 @@ function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, on
                 </div>
                 <div>
                   <p><strong>Type:</strong> {selectedRental.equipment_type}</p>
-                  <p><strong>Rate:</strong> ₱{selectedRental.rate_per_day}/day</p>
+                  <p><strong>Rate:</strong> ₱{selectedRental.rate_per_day}/hour</p>
                 </div>
               </div>
             </div>

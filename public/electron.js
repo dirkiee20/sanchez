@@ -690,7 +690,7 @@ function registerIPCHandlers() {
           }
   
           const [result] = await connection.execute(
-              'INSERT INTO rentals (client_id, equipment_id, start_date, end_date, rate_per_day, total_amount, quantity, status, payment_status, total_paid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              'INSERT INTO rentals (client_id, equipment_id, start_date, end_date, rate_per_day, total_amount, quantity, status, payment_status, total_paid, overnight_custody) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
               [
                   rentalData.client_id,
                   rentalData.equipment_id,
@@ -701,7 +701,8 @@ function registerIPCHandlers() {
                   qty,
                   rentalData.status,
                   'unpaid', // New rentals start as unpaid
-                  0 // No payments made yet
+                  0, // No payments made yet
+                  rentalData.overnight_custody || 'owner' // Default to owner if not specified
               ]
           );
   
@@ -722,8 +723,8 @@ function registerIPCHandlers() {
   ipcMain.handle('db-update-rental', async (event, id, rentalData) => {
     try {
       const [result] = await db.execute(
-        'UPDATE rentals SET client_id = ?, equipment_id = ?, start_date = ?, end_date = ?, rate_per_day = ?, total_amount = ?, status = ? WHERE id = ?',
-        [rentalData.client_id, rentalData.equipment_id, rentalData.start_date, rentalData.end_date, rentalData.rate_per_day, rentalData.total_amount, rentalData.status, id]
+        'UPDATE rentals SET client_id = ?, equipment_id = ?, start_date = ?, end_date = ?, rate_per_day = ?, total_amount = ?, status = ?, overnight_custody = ? WHERE id = ?',
+        [rentalData.client_id, rentalData.equipment_id, rentalData.start_date, rentalData.end_date, rentalData.rate_per_day, rentalData.total_amount, rentalData.status, rentalData.overnight_custody || 'owner', id]
       );
       return { changes: result.affectedRows };
     } catch (error) {
@@ -1109,49 +1110,70 @@ function registerIPCHandlers() {
       // Use database transaction to prevent race conditions
       const connection = db;
       await connection.beginTransaction();
-  
+
       try {
           console.log('Electron: Adding payment:', paymentData);
-  
-          // First, insert the payment record
-          const [result] = await connection.execute(
-              'INSERT INTO payments (rental_id, amount, payment_type, payment_date, notes) VALUES (?, ?, ?, ?, ?)',
-              [paymentData.rental_id, paymentData.amount, paymentData.payment_type, paymentData.payment_date, paymentData.notes]
-          );
-  
-          console.log('Electron: Payment inserted, ID:', result.insertId);
-  
-          // Then, update the rental's payment status and total paid
+
+          // Get current rental data to determine payment type
           const [rentalRows] = await connection.execute('SELECT total_amount, total_paid FROM rentals WHERE id = ? FOR UPDATE', [paymentData.rental_id]);
           const rental = rentalRows[0];
-  
-          console.log('Electron: Current rental data:', rental);
-  
-          if (rental) {
-              const newTotalPaid = parseFloat(rental.total_paid || 0) + parseFloat(paymentData.amount);
-              const totalAmount = parseFloat(rental.total_amount);
-  
-              let paymentStatus;
-              if (newTotalPaid >= totalAmount) {
-                  paymentStatus = 'paid';
-              } else if (newTotalPaid > 0) {
-                  paymentStatus = 'partial';
-              } else {
-                  paymentStatus = 'unpaid';
-              }
-  
-              console.log('Electron: Updating rental payment status:', { newTotalPaid, paymentStatus });
-  
-              await connection.execute(
-                  'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
-                  [newTotalPaid, paymentStatus, paymentData.rental_id]
-              );
-  
-              console.log('Electron: Rental payment status updated successfully');
+
+          if (!rental) {
+              await connection.rollback();
+              throw new Error('Rental not found');
           }
-  
+
+          const currentTotalPaid = parseFloat(rental.total_paid || 0);
+          const paymentAmount = parseFloat(paymentData.amount);
+          const totalAmount = parseFloat(rental.total_amount);
+          const newTotalPaid = currentTotalPaid + paymentAmount;
+
+          // Automatically determine payment type based on the payment amount and current status
+          let paymentType;
+          if (newTotalPaid >= totalAmount) {
+              // This payment completes the full amount
+              paymentType = 'full';
+          } else {
+              // This is a partial payment
+              paymentType = 'partial';
+          }
+
+          console.log('Electron: Calculated payment type:', paymentType, {
+              currentTotalPaid,
+              paymentAmount,
+              newTotalPaid,
+              totalAmount
+          });
+
+          // Insert the payment record with auto-determined payment type
+          const [result] = await connection.execute(
+              'INSERT INTO payments (rental_id, amount, payment_type, payment_date, notes) VALUES (?, ?, ?, ?, ?)',
+              [paymentData.rental_id, paymentData.amount, paymentType, paymentData.payment_date, paymentData.notes]
+          );
+
+          console.log('Electron: Payment inserted, ID:', result.insertId);
+
+          // Update the rental's payment status and total paid
+          let rentalPaymentStatus;
+          if (newTotalPaid >= totalAmount) {
+              rentalPaymentStatus = 'paid';
+          } else if (newTotalPaid > 0) {
+              rentalPaymentStatus = 'partial';
+          } else {
+              rentalPaymentStatus = 'unpaid';
+          }
+
+          console.log('Electron: Updating rental payment status:', { newTotalPaid, rentalPaymentStatus });
+
+          await connection.execute(
+              'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
+              [newTotalPaid, rentalPaymentStatus, paymentData.rental_id]
+          );
+
+          console.log('Electron: Rental payment status updated successfully');
+
           await connection.commit();
-          return { id: result.insertId };
+          return { id: result.insertId, paymentType };
       } catch (error) {
           await connection.rollback();
           console.error('Electron: Error adding payment:', error);
@@ -2143,6 +2165,7 @@ async function createTables() {
       \`status\` ENUM('active', 'returned', 'overdue') NOT NULL,
       payment_status ENUM('unpaid', 'partial', 'paid') NOT NULL DEFAULT 'unpaid',
       total_paid DECIMAL(10,2) NOT NULL DEFAULT 0,
+      overnight_custody ENUM('owner', 'client') NOT NULL DEFAULT 'owner',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (client_id) REFERENCES clients (id),
@@ -2257,9 +2280,14 @@ async function migrateSchema() {
       await db.execute(`ALTER TABLE rentals ADD COLUMN total_paid DECIMAL(10,2) NOT NULL DEFAULT 0`);
     }
 
+    if (!rentalColNames.includes('overnight_custody')) {
+      await db.execute(`ALTER TABLE rentals ADD COLUMN overnight_custody ENUM('owner', 'client') NOT NULL DEFAULT 'owner'`);
+    }
+
     await db.execute(`UPDATE rentals SET quantity = COALESCE(quantity, 1)`);
     await db.execute(`UPDATE rentals SET payment_status = COALESCE(payment_status, 'unpaid')`);
     await db.execute(`UPDATE rentals SET total_paid = COALESCE(total_paid, 0)`);
+    await db.execute(`UPDATE rentals SET overnight_custody = COALESCE(overnight_custody, 'owner')`);
   } catch (e) {
     console.error('Migration error:', e);
   }

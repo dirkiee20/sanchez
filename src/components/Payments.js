@@ -429,10 +429,12 @@ function PaymentModal({ payment, rentals, preSelectedRental, onClose, onSave, on
   const [formData, setFormData] = useState({
     rental_id: payment?.rental_id || '',
     amount: payment?.amount || '',
-    payment_type: payment?.payment_type || 'full',
     payment_date: payment?.payment_date || new Date().toISOString().split('T')[0],
     notes: payment?.notes || ''
   });
+  const [calculatedPaymentType, setCalculatedPaymentType] = useState(payment?.payment_type || 'partial');
+  const [remainingBalance, setRemainingBalance] = useState(0);
+  const [totalPaid, setTotalPaid] = useState(0);
   const [rentalSearchTerm, setRentalSearchTerm] = useState('');
   const [showRentalSuggestions, setShowRentalSuggestions] = useState(false);
   const [selectedRental, setSelectedRental] = useState(
@@ -455,8 +457,54 @@ function PaymentModal({ payment, rentals, preSelectedRental, onClose, onSave, on
       }));
       setRentalSearchTerm(`${selectedRental.client_name} - ${selectedRental.equipment_name} - ₱${selectedRental.total_amount}`);
       setShowRentalSuggestions(false);
+      // Calculate payment type when rental changes
+      calculatePaymentType(selectedRental, formData.amount);
     }
   }, [selectedRental]);
+
+  // Calculate payment type when amount changes
+  useEffect(() => {
+    if (selectedRental && formData.amount) {
+      calculatePaymentType(selectedRental, formData.amount);
+    }
+  }, [formData.amount, selectedRental]);
+
+  const calculatePaymentType = async (rental, amount) => {
+    if (!rental) {
+      setCalculatedPaymentType('partial');
+      setRemainingBalance(0);
+      setTotalPaid(0);
+      return;
+    }
+
+    try {
+      // Get existing payments for this rental to calculate total paid so far
+      const existingPayments = await paymentService.getPaymentsByRental(rental.id);
+      const totalAlreadyPaid = existingPayments.reduce((sum, payment) => sum + parseFloat(payment.amount), 0);
+      const totalAmount = parseFloat(rental.total_amount);
+      const currentRemaining = Math.max(0, totalAmount - totalAlreadyPaid);
+
+      setTotalPaid(totalAlreadyPaid);
+      setRemainingBalance(currentRemaining);
+
+      if (!amount) {
+        setCalculatedPaymentType('partial');
+        return;
+      }
+
+      const paymentAmount = parseFloat(amount);
+      const newTotalPaid = totalAlreadyPaid + paymentAmount;
+
+      // Determine if this payment will complete the full amount
+      const willCompletePayment = newTotalPaid >= totalAmount;
+      setCalculatedPaymentType(willCompletePayment ? 'full' : 'partial');
+    } catch (error) {
+      console.error('Error calculating payment type:', error);
+      setCalculatedPaymentType('partial');
+      setRemainingBalance(0);
+      setTotalPaid(0);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -484,6 +532,7 @@ function PaymentModal({ payment, rentals, preSelectedRental, onClose, onSave, on
       // Continue with payment if we can't check status
     }
 
+    // Submit form data (payment_type will be calculated in backend)
     onSave(formData);
   };
 
@@ -593,9 +642,29 @@ function PaymentModal({ payment, rentals, preSelectedRental, onClose, onSave, on
                   </button>
                 </div>
                 {selectedRental && (
-                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
-                    <div className="text-sm font-medium text-green-800">Selected: {selectedRental.client_name}</div>
-                    <div className="text-xs text-green-600">{selectedRental.equipment_name} • ₱{selectedRental.total_amount}</div>
+                  <div className="mt-2 space-y-2">
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                      <div className="text-sm font-medium text-green-800">Selected: {selectedRental.client_name}</div>
+                      <div className="text-xs text-green-600">{selectedRental.equipment_name} • Total: ₱{parseFloat(selectedRental.total_amount).toFixed(2)}</div>
+                    </div>
+
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-blue-600 font-medium">Total Paid:</span>
+                          <div className="text-blue-800 font-semibold">₱{totalPaid.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <span className="text-orange-600 font-medium">Remaining:</span>
+                          <div className="text-orange-800 font-semibold">₱{remainingBalance.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      {remainingBalance === 0 && (
+                        <div className="mt-2 text-xs text-green-600 font-medium">
+                          ✓ This rental is fully paid
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 {preSelectedRental && !selectedRental && (
@@ -626,17 +695,29 @@ function PaymentModal({ payment, rentals, preSelectedRental, onClose, onSave, on
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-secondary-700 mb-1">
-                Payment Type
+                Payment Type (Auto-calculated)
               </label>
-              <select
-                name="payment_type"
-                className="input-field"
-                value={formData.payment_type}
-                onChange={handleChange}
-              >
-                <option value="full">Full Payment</option>
-                <option value="partial">Partial Payment</option>
-              </select>
+              <div className="input-field bg-secondary-50">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  calculatedPaymentType === 'full'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {calculatedPaymentType === 'full' ? 'Full Payment' : 'Partial Payment'}
+                </span>
+              </div>
+              <div className="text-xs text-secondary-500 mt-1 space-y-1">
+                <p>Type determined automatically based on payment amount</p>
+                {formData.amount && selectedRental && (
+                  <p className="font-medium">
+                    This payment of ₱{parseFloat(formData.amount).toFixed(2)} will
+                    {calculatedPaymentType === 'full'
+                      ? ` complete the remaining ₱${remainingBalance.toFixed(2)}`
+                      : ` leave ₱${Math.max(0, remainingBalance - parseFloat(formData.amount)).toFixed(2)} remaining`
+                    }
+                  </p>
+                )}
+              </div>
             </div>
 
             <div>
