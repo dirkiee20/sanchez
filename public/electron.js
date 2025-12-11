@@ -2329,6 +2329,18 @@ async function migrateSchema() {
     await db.execute(`UPDATE rentals SET payment_status = COALESCE(payment_status, 'unpaid')`);
     await db.execute(`UPDATE rentals SET total_paid = COALESCE(total_paid, 0)`);
     await db.execute(`UPDATE rentals SET overnight_custody = COALESCE(overnight_custody, 'owner')`);
+
+    const [returnColumns] = await db.execute(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'returns'
+    `);
+
+    const returnColNames = returnColumns.map(row => row.COLUMN_NAME);
+
+    if (!returnColNames.includes('damaged_count')) {
+      await db.execute(`ALTER TABLE returns ADD COLUMN damaged_count INT DEFAULT 1`);
+    }
   } catch (e) {
     console.error('Migration error:', e);
   }
