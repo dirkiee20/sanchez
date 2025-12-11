@@ -442,7 +442,7 @@ function RentalSelectionModal({ rentals, onClose, onSelectRental }) {
                     <p className="text-sm text-secondary-500">
                       {new Date(rental.start_date).toLocaleDateString()} - {new Date(rental.end_date).toLocaleDateString()}
                     </p>
-                    <p className="text-sm text-green-600 font-medium">₱{rental.rate_per_day}/hour</p>
+                    <p className="text-sm text-green-600 font-medium">₱{rental.rate_per_hour}/hour</p>
                   </div>
                   <Package className="h-5 w-5 text-secondary-400" />
                 </div>
@@ -472,7 +472,8 @@ function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, on
     condition: returnItem?.condition || 'good',
     damage_description: returnItem?.damage_description || '',
     additional_charges: returnItem?.additional_charges || 0,
-    notes: returnItem?.notes || ''
+    notes: returnItem?.notes || '',
+    damaged_count: returnItem?.damaged_count || 1
   });
 
   const [selectedRental, setSelectedRental] = useState(null);
@@ -670,7 +671,7 @@ function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, on
                 </div>
                 <div>
                   <p><strong>Type:</strong> {selectedRental.equipment_type}</p>
-                  <p><strong>Rate:</strong> ₱{selectedRental.rate_per_day}/hour</p>
+                  <p><strong>Rate:</strong> ₱{selectedRental.rate_per_hour}/hour</p>
                 </div>
               </div>
             </div>
@@ -722,6 +723,27 @@ function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, on
                 onChange={handleChange}
                 placeholder="Describe the damage found on the equipment..."
               />
+            </div>
+          )}
+
+          {formData.condition === 'damaged' && selectedRental && selectedRental.quantity > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-secondary-700 mb-1">
+                Number of Damaged Items
+              </label>
+              <input
+                type="number"
+                name="damaged_count"
+                min="1"
+                max={selectedRental.quantity}
+                className="input-field"
+                value={formData.damaged_count}
+                onChange={handleChange}
+                placeholder="How many items are damaged?"
+              />
+              <p className="text-xs text-secondary-500 mt-1">
+                Total rented: {selectedRental.quantity} items
+              </p>
             </div>
           )}
 

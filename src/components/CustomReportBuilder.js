@@ -28,7 +28,7 @@ function CustomReportBuilder() {
   // Available data sources
   const dataSources = [
     { id: 'clients', name: 'Clients', icon: Database, fields: ['name', 'contact_number', 'email', 'project_site'] },
-    { id: 'equipment', name: 'Equipment', icon: Database, fields: ['name', 'type', 'rate_per_day', 'status', 'quantity_total'] },
+    { id: 'equipment', name: 'Equipment', icon: Database, fields: ['name', 'type', 'rate_per_hour', 'status', 'quantity_total'] },
     { id: 'rentals', name: 'Rentals', icon: Database, fields: ['start_date', 'end_date', 'total_amount', 'status', 'payment_status'] },
     { id: 'payments', name: 'Payments', icon: Database, fields: ['amount', 'payment_type', 'payment_date', 'notes'] },
     { id: 'returns', name: 'Returns', icon: Database, fields: ['return_date', 'condition', 'additional_charges'] }

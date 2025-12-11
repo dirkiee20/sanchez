@@ -122,18 +122,6 @@ function Equipment() {
     }
   };
 
-  const handleStatusChange = async (id, newStatus) => {
-    try {
-      const item = equipment.find(e => e.id === id);
-      if (item) {
-        await equipmentService.updateEquipment(id, { ...item, status: newStatus });
-        await loadEquipment(); // Reload the list
-      }
-    } catch (error) {
-      console.error('Error updating equipment status:', error);
-      alert('Error updating equipment status');
-    }
-  };
 
   if (loading) {
     return (
@@ -179,7 +167,6 @@ function Equipment() {
           <option value="all">All Status</option>
           <option value="available">Available</option>
           <option value="rented">Rented</option>
-          <option value="maintenance">Maintenance</option>
         </select>
       </div>
 
@@ -203,12 +190,17 @@ function Equipment() {
             <div className="space-y-2 mb-4">
               <div className="flex justify-between">
                 <span className="text-sm text-secondary-600">Rate per hour:</span>
-                <span className="text-sm font-medium text-secondary-900">₱{item.rate_per_day}</span>
+                <span className="text-sm font-medium text-secondary-900">₱{item.rate_per_hour}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-secondary-600">Quantity (avail/total):</span>
                 <span className="text-sm font-medium text-secondary-900">{item.quantity_available ?? 0}/{item.quantity_total ?? 0}</span>
               </div>
+              {(item.maintenance_quantity ?? 0) > 0 && (
+                <div className="text-sm text-secondary-600">
+                  {item.maintenance_quantity ?? 0} out of {item.quantity_total ?? 0} is under maintenance
+                </div>
+              )}
               <p className="text-sm text-secondary-600">{item.description}</p>
             </div>
 
@@ -229,16 +221,6 @@ function Equipment() {
                   </button>
                 )}
               </div>
-              
-              <select
-                value={item.status}
-                onChange={(e) => handleStatusChange(item.id, e.target.value)}
-                className="text-xs border border-secondary-300 rounded px-2 py-1"
-              >
-                <option value="available">Available</option>
-                <option value="rented">Rented</option>
-                <option value="maintenance">Maintenance</option>
-              </select>
             </div>
           </div>
         ))}
@@ -274,8 +256,7 @@ function EquipmentModal({ equipment, onClose, onSave }) {
   const [formData, setFormData] = useState({
     name: equipment?.name || '',
     type: equipment?.type || '',
-    rate_per_day: equipment?.rate_per_day || '',
-    status: equipment?.status || 'available',
+    rate_per_hour: equipment?.rate_per_hour || '',
     description: equipment?.description || '',
     quantity_total: equipment?.quantity_total ?? 1,
     quantity_available: equipment?.quantity_available ?? equipment?.quantity_total ?? 1
@@ -335,11 +316,11 @@ function EquipmentModal({ equipment, onClose, onSave }) {
             </label>
             <input
               type="number"
-              name="rate_per_day"
+              name="rate_per_hour"
               step="0.01"
               required
               className="input-field"
-              value={formData.rate_per_day}
+              value={formData.rate_per_hour}
               onChange={handleChange}
             />
           </div>
@@ -375,21 +356,6 @@ function EquipmentModal({ equipment, onClose, onSave }) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-secondary-700 mb-1">
-              Status
-            </label>
-            <select
-              name="status"
-              className="input-field"
-              value={formData.status}
-              onChange={handleChange}
-            >
-              <option value="available">Available</option>
-              <option value="rented">Rented</option>
-              <option value="maintenance">Maintenance</option>
-            </select>
-          </div>
 
           <div>
             <label className="block text-sm font-medium text-secondary-700 mb-1">

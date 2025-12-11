@@ -92,7 +92,7 @@ export const createMockIpc = () => {
                id: i,
                name: eq.name,
                type: eq.type,
-               rate_per_day: eq.rate,
+               rate_per_hour: eq.rate,
                status: statuses[Math.floor(Math.random() * statuses.length)],
                description: eq.desc,
                quantity_total: Math.floor(Math.random() * 5) + 1,
@@ -125,7 +125,7 @@ export const createMockIpc = () => {
                equipment_type: ['Heavy Machinery', 'Construction Equipment', 'Lifting Equipment', 'Power Equipment'][Math.floor(Math.random() * 4)],
                start_date: startDate.toISOString().split('T')[0],
                end_date: endDate.toISOString().split('T')[0],
-               rate_per_day: rate,
+               rate_per_hour: rate,
                total_amount: totalAmount,
                quantity: quantity,
                status: rentalStatuses[Math.floor(Math.random() * rentalStatuses.length)],
@@ -143,7 +143,7 @@ export const createMockIpc = () => {
                id: 4,
                name: 'Concrete Mixer 3.5m³',
                type: 'Construction Equipment',
-               rate_per_day: 120.00,
+               rate_per_hour: 120.00,
                status: 'available',
                description: 'Portable concrete mixer with diesel engine'
              },
@@ -151,7 +151,7 @@ export const createMockIpc = () => {
                id: 5,
                name: 'Generator 50kW',
                type: 'Power Equipment',
-               rate_per_day: 80.00,
+               rate_per_hour: 80.00,
                status: 'available',
                description: 'Diesel generator with automatic start'
              }
@@ -172,7 +172,7 @@ export const createMockIpc = () => {
                notes: 'Equipment returned in excellent condition',
                start_date: '2024-01-15',
                end_date: '2024-01-25',
-               rate_per_day: 450.00,
+               rate_per_hour: 450.00,
                total_amount: 4500.00,
                created_at: new Date().toISOString()
              },
@@ -189,7 +189,7 @@ export const createMockIpc = () => {
                notes: 'Equipment returned with damage, repair charges applied',
                start_date: '2024-01-10',
                end_date: '2024-01-20',
-               rate_per_day: 650.00,
+               rate_per_hour: 650.00,
                total_amount: 6500.00,
                created_at: new Date().toISOString()
              }
@@ -206,7 +206,7 @@ export const createMockIpc = () => {
                equipment_type: 'Heavy Machinery',
                start_date: '2024-01-15',
                end_date: '2024-01-25',
-               rate_per_day: 450.00,
+               rate_per_hour: 450.00,
                total_amount: 4500.00,
                status: 'active'
              },
@@ -219,7 +219,7 @@ export const createMockIpc = () => {
                equipment_type: 'Heavy Machinery',
                start_date: '2024-01-20',
                end_date: '2024-01-30',
-               rate_per_day: 380.00,
+               rate_per_hour: 380.00,
                total_amount: 3800.00,
                status: 'active'
              }
@@ -237,7 +237,7 @@ export const createMockIpc = () => {
                equipment_type: 'Heavy Machinery',
                start_date: '2024-01-15',
                end_date: '2024-01-25',
-               rate_per_day: 450.00,
+               rate_per_hour: 450.00,
                total_amount: 4500.00,
                status: 'active',
                created_at: new Date().toISOString(),
@@ -252,7 +252,7 @@ export const createMockIpc = () => {
                equipment_type: 'Lifting Equipment',
                start_date: '2024-01-10',
                end_date: '2024-01-20',
-               rate_per_day: 650.00,
+               rate_per_hour: 650.00,
                total_amount: 6500.00,
                status: 'overdue',
                created_at: new Date().toISOString(),

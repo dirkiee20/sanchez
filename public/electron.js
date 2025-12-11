@@ -552,16 +552,18 @@ function registerIPCHandlers() {
 
   ipcMain.handle('db-add-equipment', async (event, equipmentData) => {
     try {
+      const quantityAvailable = equipmentData.quantity_available ?? equipmentData.quantity_total ?? 1;
+      const status = quantityAvailable > 0 ? 'available' : 'rented';
       const [result] = await db.execute(
-        'INSERT INTO equipment (name, type, rate_per_day, status, description, quantity_total, quantity_available) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO equipment (name, type, rate_per_hour, status, description, quantity_total, quantity_available) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
           equipmentData.name,
           equipmentData.type,
-          equipmentData.rate_per_day,
-          equipmentData.status,
+          equipmentData.rate_per_hour,
+          status,
           equipmentData.description,
           equipmentData.quantity_total ?? 1,
-          equipmentData.quantity_available ?? equipmentData.quantity_total ?? 1
+          quantityAvailable
         ]
       );
       return { id: result.insertId };
@@ -572,16 +574,18 @@ function registerIPCHandlers() {
 
   ipcMain.handle('db-update-equipment', async (event, id, equipmentData) => {
     try {
+      const quantityAvailable = equipmentData.quantity_available ?? equipmentData.quantity_total ?? 1;
+      const status = quantityAvailable > 0 ? 'available' : 'rented';
       const [result] = await db.execute(
-        'UPDATE equipment SET name = ?, type = ?, rate_per_day = ?, status = ?, description = ?, quantity_total = ?, quantity_available = ? WHERE id = ?',
+        'UPDATE equipment SET name = ?, type = ?, rate_per_hour = ?, status = ?, description = ?, quantity_total = ?, quantity_available = ? WHERE id = ?',
         [
           equipmentData.name,
           equipmentData.type,
-          equipmentData.rate_per_day,
-          equipmentData.status,
-          equipmentData.description,  // ✅ FIXED: Was duplicate status
+          equipmentData.rate_per_hour,
+          status,
+          equipmentData.description,
           equipmentData.quantity_total ?? 1,
-          equipmentData.quantity_available ?? equipmentData.quantity_total ?? 1,
+          quantityAvailable,
           id
         ]
       );
@@ -690,13 +694,13 @@ function registerIPCHandlers() {
           }
   
           const [result] = await connection.execute(
-              'INSERT INTO rentals (client_id, equipment_id, start_date, end_date, rate_per_day, total_amount, quantity, status, payment_status, total_paid, overnight_custody) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              'INSERT INTO rentals (client_id, equipment_id, start_date, end_date, rate_per_hour, total_amount, quantity, status, payment_status, total_paid, overnight_custody) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
               [
                   rentalData.client_id,
                   rentalData.equipment_id,
                   rentalData.start_date,
                   rentalData.end_date,
-                  rentalData.rate_per_day,
+                  rentalData.rate_per_hour,
                   rentalData.total_amount,
                   qty,
                   rentalData.status,
@@ -723,8 +727,8 @@ function registerIPCHandlers() {
   ipcMain.handle('db-update-rental', async (event, id, rentalData) => {
     try {
       const [result] = await db.execute(
-        'UPDATE rentals SET client_id = ?, equipment_id = ?, start_date = ?, end_date = ?, rate_per_day = ?, total_amount = ?, status = ?, overnight_custody = ? WHERE id = ?',
-        [rentalData.client_id, rentalData.equipment_id, rentalData.start_date, rentalData.end_date, rentalData.rate_per_day, rentalData.total_amount, rentalData.status, rentalData.overnight_custody || 'owner', id]
+        'UPDATE rentals SET client_id = ?, equipment_id = ?, start_date = ?, end_date = ?, rate_per_hour = ?, total_amount = ?, status = ?, overnight_custody = ? WHERE id = ?',
+        [rentalData.client_id, rentalData.equipment_id, rentalData.start_date, rentalData.end_date, rentalData.rate_per_hour, rentalData.total_amount, rentalData.status, rentalData.overnight_custody || 'owner', id]
       );
       return { changes: result.affectedRows };
     } catch (error) {
@@ -746,11 +750,14 @@ function registerIPCHandlers() {
           if (rental) {
               // Lock equipment row for update
               await connection.execute('SELECT * FROM equipment WHERE id = ? FOR UPDATE', [rental.equipment_id]);
-              await connection.execute('UPDATE equipment SET quantity_available = quantity_available + ? WHERE id = ?', [rental.quantity ?? 1, rental.equipment_id]);
-              await connection.execute(
-                  `UPDATE equipment SET status = CASE WHEN quantity_available > 0 THEN 'available' ELSE 'rented' END WHERE id = ?`,
-                  [rental.equipment_id]
-              );
+              const qty = rental.quantity ?? 1;
+              await connection.execute('UPDATE equipment SET quantity_available = quantity_available + ? WHERE id = ?', [qty, rental.equipment_id]);
+
+              // Determine status based on whether all items are accounted for
+              const [statusCheck] = await connection.execute('SELECT quantity_total, quantity_available, maintenance_quantity FROM equipment WHERE id = ?', [rental.equipment_id]);
+              const { quantity_total, quantity_available, maintenance_quantity } = statusCheck[0];
+              const status = (quantity_available + maintenance_quantity) >= quantity_total ? 'available' : 'rented';
+              await connection.execute('UPDATE equipment SET status = ? WHERE id = ?', [status, rental.equipment_id]);
           }
   
           await connection.commit();
@@ -807,7 +814,7 @@ function registerIPCHandlers() {
                 e.type as equipment_type,
                 rental.start_date,
                 rental.end_date,
-                rental.rate_per_day,
+                rental.rate_per_hour,
                 rental.total_amount
         FROM returns r
         JOIN rentals rental ON r.rental_id = rental.id
@@ -859,8 +866,8 @@ function registerIPCHandlers() {
           }
   
           const [result] = await connection.execute(
-              'INSERT INTO returns (rental_id, return_date, `condition`, damage_description, additional_charges, notes) VALUES (?, ?, ?, ?, ?, ?)',
-              [returnData.rental_id, returnData.return_date, returnData.condition, returnData.damage_description, returnData.additional_charges, returnData.notes]
+              'INSERT INTO returns (rental_id, return_date, `condition`, damage_description, additional_charges, damaged_count, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [returnData.rental_id, returnData.return_date, returnData.condition, returnData.damage_description, returnData.additional_charges, returnData.damaged_count || 1, returnData.notes]
           );
   
           await connection.execute('UPDATE rentals SET status = ? WHERE id = ?', ['returned', returnData.rental_id]);
@@ -871,14 +878,28 @@ function registerIPCHandlers() {
           if (r) {
               // Lock equipment row for update
               await connection.execute('SELECT * FROM equipment WHERE id = ? FOR UPDATE', [r.equipment_id]);
-              const eqStatus = returnData.condition === 'damaged' ? 'maintenance' : null;
-              await connection.execute('UPDATE equipment SET quantity_available = quantity_available + ? WHERE id = ?', [r.quantity ?? 1, r.equipment_id]);
-  
-              if (eqStatus) {
-                  await connection.execute('UPDATE equipment SET status = ? WHERE id = ?', [eqStatus, r.equipment_id]);
-              } else {
-                  await connection.execute(`UPDATE equipment SET status = CASE WHEN quantity_available > 0 THEN 'available' ELSE 'rented' END WHERE id = ?`, [r.equipment_id]);
+              const qty = r.quantity ?? 1;
+              let availableIncrease = 0;
+              let maintenanceIncrease = 0;
+
+              if (returnData.condition === 'good') {
+                  availableIncrease = qty;
+              } else if (returnData.condition === 'damaged') {
+                  const damagedCount = returnData.damaged_count || qty;
+                  availableIncrease = qty - damagedCount;
+                  maintenanceIncrease = damagedCount;
+              } else if (returnData.condition === 'lost') {
+                  // For lost, don't add to available, perhaps add to maintenance
+                  maintenanceIncrease = qty;
               }
+
+              await connection.execute('UPDATE equipment SET quantity_available = quantity_available + ?, maintenance_quantity = maintenance_quantity + ? WHERE id = ?', [availableIncrease, maintenanceIncrease, r.equipment_id]);
+
+              // Determine status based on whether all items are accounted for (available + maintenance = total means no rentals)
+              const [statusCheck] = await connection.execute('SELECT quantity_total, quantity_available, maintenance_quantity FROM equipment WHERE id = ?', [r.equipment_id]);
+              const { quantity_total, quantity_available, maintenance_quantity } = statusCheck[0];
+              const status = (quantity_available + maintenance_quantity) >= quantity_total ? 'available' : 'rented';
+              await connection.execute('UPDATE equipment SET status = ? WHERE id = ?', [status, r.equipment_id]);
           }
   
           await connection.commit();
@@ -1488,7 +1509,7 @@ function registerIPCHandlers() {
           COUNT(DISTINCT e.id) as total_equipment,
           COUNT(DISTINCT CASE WHEN r.status = 'active' THEN r.equipment_id END) as currently_rented,
           COUNT(DISTINCT CASE WHEN r.status = 'returned' THEN r.equipment_id END) as returned_count,
-          ROUND(AVG(r.rate_per_day), 2) as avg_daily_rate,
+          ROUND(AVG(r.rate_per_hour), 2) as avg_hourly_rate,
           SUM(CASE WHEN r.status IN ('active', 'returned') THEN r.total_amount ELSE 0 END) as total_revenue
         FROM equipment e
         LEFT JOIN rentals r ON e.id = r.equipment_id
@@ -1520,7 +1541,7 @@ function registerIPCHandlers() {
           e.type as equipment_type,
           COUNT(r.id) as rental_count,
           SUM(r.total_amount) as total_revenue,
-          AVG(r.rate_per_day) as avg_rate,
+          AVG(r.rate_per_hour) as avg_rate,
           MAX(r.created_at) as last_rental_date
         FROM equipment e
         JOIN rentals r ON e.id = r.equipment_id
@@ -1660,7 +1681,7 @@ function registerIPCHandlers() {
           e.name as equipment_name,
           e.type as equipment_type,
           DATEDIFF(CURDATE(), r.end_date) as days_overdue,
-          (DATEDIFF(CURDATE(), r.end_date) * r.rate_per_day) as overdue_charges,
+          (DATEDIFF(CURDATE(), r.end_date) * r.rate_per_hour) as overdue_charges,
           r.total_amount - r.total_paid as outstanding_amount
         FROM rentals r
         JOIN clients c ON r.client_id = c.id
@@ -1676,7 +1697,7 @@ function registerIPCHandlers() {
         SELECT
           COUNT(*) as total_overdue,
           SUM(DATEDIFF(CURDATE(), r.end_date)) as total_overdue_days,
-          SUM(DATEDIFF(CURDATE(), r.end_date) * r.rate_per_day) as total_overdue_charges,
+          SUM(DATEDIFF(CURDATE(), r.end_date) * r.rate_per_hour) as total_overdue_charges,
           SUM(r.total_amount - r.total_paid) as total_outstanding,
           AVG(DATEDIFF(CURDATE(), r.end_date)) as avg_days_overdue,
           MAX(DATEDIFF(CURDATE(), r.end_date)) as max_days_overdue
@@ -1692,7 +1713,7 @@ function registerIPCHandlers() {
           e.type as equipment_type,
           COUNT(*) as overdue_count,
           SUM(DATEDIFF(CURDATE(), r.end_date)) as total_overdue_days,
-          SUM(DATEDIFF(CURDATE(), r.end_date) * r.rate_per_day) as total_charges
+          SUM(DATEDIFF(CURDATE(), r.end_date) * r.rate_per_hour) as total_charges
         FROM rentals r
         JOIN equipment e ON r.equipment_id = e.id
         WHERE r.status = 'active'
@@ -1742,7 +1763,7 @@ function registerIPCHandlers() {
           e.type as equipment_type,
           r.start_date,
           r.end_date,
-          r.rate_per_day,
+          r.rate_per_hour,
           r.total_amount
         FROM returns ret
         JOIN rentals r ON ret.rental_id = r.id
@@ -2144,11 +2165,12 @@ async function createTables() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       type VARCHAR(255) NOT NULL,
-      rate_per_day DECIMAL(10,2) NOT NULL,
+      rate_per_hour DECIMAL(10,2) NOT NULL,
       \`status\` ENUM('available', 'rented', 'maintenance') NOT NULL,
       description TEXT,
       quantity_total INT NOT NULL DEFAULT 1,
       quantity_available INT NOT NULL DEFAULT 1,
+      maintenance_quantity INT NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`,
@@ -2159,7 +2181,7 @@ async function createTables() {
       equipment_id INT NOT NULL,
       start_date DATE NOT NULL,
       end_date DATE NOT NULL,
-      rate_per_day DECIMAL(10,2) NOT NULL,
+      rate_per_hour DECIMAL(10,2) NOT NULL,
       total_amount DECIMAL(10,2) NOT NULL,
       quantity INT NOT NULL DEFAULT 1,
       \`status\` ENUM('active', 'returned', 'overdue') NOT NULL,
@@ -2190,6 +2212,7 @@ async function createTables() {
       \`condition\` ENUM('good', 'damaged', 'lost') NOT NULL,
       damage_description TEXT,
       additional_charges DECIMAL(10,2) DEFAULT 0,
+      damaged_count INT DEFAULT 1,
       notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (rental_id) REFERENCES rentals (id)
@@ -2250,15 +2273,28 @@ async function migrateSchema() {
 
     const colNames = equipmentColumns.map(row => row.COLUMN_NAME);
 
+    // Rename rate_per_day to rate_per_hour if it exists
+    if (colNames.includes('rate_per_day') && !colNames.includes('rate_per_hour')) {
+      await db.execute(`ALTER TABLE equipment CHANGE rate_per_day rate_per_hour DECIMAL(10,2) NOT NULL`);
+    }
+
     if (!colNames.includes('quantity_total')) {
       await db.execute(`ALTER TABLE equipment ADD COLUMN quantity_total INT NOT NULL DEFAULT 1`);
     }
     if (!colNames.includes('quantity_available')) {
       await db.execute(`ALTER TABLE equipment ADD COLUMN quantity_available INT NOT NULL DEFAULT 1`);
     }
+    if (!colNames.includes('maintenance_quantity')) {
+      await db.execute(`ALTER TABLE equipment ADD COLUMN maintenance_quantity INT NOT NULL DEFAULT 0`);
+    }
 
     await db.execute(`UPDATE equipment SET quantity_total = COALESCE(quantity_total, 1)`);
     await db.execute(`UPDATE equipment SET quantity_available = COALESCE(quantity_available, quantity_total)`);
+    await db.execute(`UPDATE equipment SET maintenance_quantity = COALESCE(maintenance_quantity, 0)`);
+
+    // Migrate old maintenance status to maintenance_quantity
+    await db.execute(`UPDATE equipment SET maintenance_quantity = quantity_total - quantity_available WHERE status = 'maintenance'`);
+    await db.execute(`UPDATE equipment SET status = CASE WHEN quantity_available > 0 THEN 'available' ELSE 'rented' END`);
 
     const [rentalColumns] = await db.execute(`
       SELECT COLUMN_NAME
@@ -2267,6 +2303,11 @@ async function migrateSchema() {
     `);
 
     const rentalColNames = rentalColumns.map(row => row.COLUMN_NAME);
+
+    // Rename rate_per_day to rate_per_hour if it exists
+    if (rentalColNames.includes('rate_per_day') && !rentalColNames.includes('rate_per_hour')) {
+      await db.execute(`ALTER TABLE rentals CHANGE rate_per_day rate_per_hour DECIMAL(10,2) NOT NULL`);
+    }
 
     if (!rentalColNames.includes('quantity')) {
       await db.execute(`ALTER TABLE rentals ADD COLUMN quantity INT NOT NULL DEFAULT 1`);

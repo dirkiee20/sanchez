@@ -382,7 +382,7 @@ function Rentals() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">
-                    ₱{rental.rate_per_day}
+                    ₱{rental.rate_per_hour}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">
                     {rental.quantity ?? 1}
@@ -655,7 +655,7 @@ function EquipmentSelectionModal({ equipment, onClose, onSelectEquipment }) {
                     <h3 className="font-medium text-secondary-900">{item.name}</h3>
                     <p className="text-sm text-secondary-600">{item.type}</p>
                     <p className="text-sm text-secondary-600">{item.description}</p>
-                    <p className="text-sm text-green-600 font-medium">₱{item.rate_per_day}/hour</p>
+                    <p className="text-sm text-green-600 font-medium">₱{item.rate_per_hour}/hour</p>
                   </div>
                   <Package className="h-5 w-5 text-secondary-400" />
                 </div>
@@ -684,9 +684,11 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
     equipment_id: rental?.equipment_id || '',
     start_date: rental?.start_date || '',
     end_date: rental?.end_date || '',
-    rate_per_day: rental?.rate_per_day || '',
+    rate_per_hour: rental?.rate_per_hour || '',
     total_amount: rental?.total_amount || '',
     quantity: rental?.quantity || 1,
+    hours_per_day: rental?.hours_per_day || 8,
+    mobilization_fee: rental?.mobilization_fee || 0,
     status: rental?.status || 'active',
     overnight_custody: rental?.overnight_custody || 'owner'
   });
@@ -725,7 +727,7 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
       if (equipment) {
         setFormData(prev => ({
           ...prev,
-          rate_per_day: equipment.rate_per_day
+          rate_per_hour: equipment.rate_per_hour
         }));
       }
     }
@@ -740,7 +742,7 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
         setFormData(prev => ({
           ...prev,
           equipment_id: equipment.id,
-          rate_per_day: equipment.rate_per_day
+          rate_per_hour: equipment.rate_per_hour
         }));
         setEquipmentSearchTerm(equipment.name);
       }
@@ -763,7 +765,7 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
       setFormData(prev => ({
         ...prev,
         equipment_id: selectedEquipmentItem.id,
-        rate_per_day: selectedEquipmentItem.rate_per_day
+        rate_per_hour: selectedEquipmentItem.rate_per_hour
       }));
       setEquipmentSearchTerm(selectedEquipmentItem.name);
       setShowEquipmentSuggestions(false);
@@ -771,19 +773,23 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
   }, [selectedEquipmentItem]);
 
   useEffect(() => {
-    if (formData.start_date && formData.end_date && formData.rate_per_day) {
+    if (formData.start_date && formData.end_date && formData.rate_per_hour && formData.hours_per_day) {
       const startDate = new Date(formData.start_date);
       const endDate = new Date(formData.end_date);
-      // compute hours inclusive to the end of day for endDate
-      const millis = (endDate.setHours(23,59,59,999) - startDate.setHours(0,0,0,0));
-      const hours = Math.max(1, Math.ceil(millis / (1000 * 60 * 60)));
-      const total = hours * parseFloat(formData.rate_per_day) * (parseInt(formData.quantity, 10) || 1);
+      // Calculate number of days inclusive (add 1 to include both start and end dates)
+      const days = Math.max(1, Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1);
+      // Calculate total hours: days * hours_per_day
+      const totalHours = days * parseFloat(formData.hours_per_day);
+      // Calculate rental amount: total_hours * rate_per_hour * quantity
+      const rentalAmount = totalHours * parseFloat(formData.rate_per_hour) * (parseInt(formData.quantity, 10) || 1);
+      // Add mobilization fee to total amount
+      const total = rentalAmount + parseFloat(formData.mobilization_fee || 0);
       setFormData(prev => ({
         ...prev,
         total_amount: Number.isFinite(total) ? total.toFixed(2) : '0.00'
       }));
     }
-  }, [formData.start_date, formData.end_date, formData.rate_per_day, formData.quantity]);
+  }, [formData.start_date, formData.end_date, formData.rate_per_hour, formData.quantity, formData.hours_per_day, formData.mobilization_fee]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -846,7 +852,7 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
       setFormData(prev => ({
         ...prev,
         equipment_id: '',
-        rate_per_day: ''
+        rate_per_hour: ''
       }));
     }
 
@@ -975,7 +981,7 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
                           >
                             <div className="font-medium text-secondary-900">{equipment.name}</div>
                             <div className="text-sm text-secondary-600">{equipment.type}</div>
-                            <div className="text-sm text-green-600 font-medium">₱{equipment.rate_per_day}/hour</div>
+                            <div className="text-sm text-green-600 font-medium">₱{equipment.rate_per_hour}/hour</div>
                           </div>
                         ))}
                       </div>
@@ -993,13 +999,13 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
                 {selectedEquipmentItem && (
                   <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
                     <div className="text-sm font-medium text-blue-800">Selected: {selectedEquipmentItem.name}</div>
-                    <div className="text-xs text-blue-600">{selectedEquipmentItem.type} • ₱{selectedEquipmentItem.rate_per_day}/hour</div>
+                    <div className="text-xs text-blue-600">{selectedEquipmentItem.type} • ₱{selectedEquipmentItem.rate_per_hour}/hour</div>
                   </div>
                 )}
                 {preSelectedEquipment && !selectedEquipmentItem && (
                   <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
                     <div className="text-sm font-medium text-blue-800">Selected: {preSelectedEquipment.name}</div>
-                    <div className="text-xs text-blue-600">{preSelectedEquipment.type} • ₱{preSelectedEquipment.rate_per_day}/hour</div>
+                    <div className="text-xs text-blue-600">{preSelectedEquipment.type} • ₱{preSelectedEquipment.rate_per_hour}/hour</div>
                   </div>
                 )}
               </div>
@@ -1043,11 +1049,11 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
               </label>
               <input
                 type="number"
-                name="rate_per_day"
+                name="rate_per_hour"
                 step="0.01"
                 required
                 className="input-field"
-                value={formData.rate_per_day}
+                value={formData.rate_per_hour}
                 onChange={handleChange}
               />
             </div>
@@ -1064,6 +1070,42 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
                 value={formData.quantity}
                 onChange={handleChange}
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-secondary-700 mb-1">
+                Hours per Day
+              </label>
+              <input
+                type="number"
+                name="hours_per_day"
+                min="1"
+                max="24"
+                className="input-field"
+                value={formData.hours_per_day}
+                onChange={handleChange}
+              />
+              <p className="text-xs text-secondary-500 mt-1">
+                Number of hours the equipment will be rented each day
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-secondary-700 mb-1">
+                Mobilization Fee (₱)
+              </label>
+              <input
+                type="number"
+                name="mobilization_fee"
+                step="0.01"
+                min="0"
+                className="input-field"
+                value={formData.mobilization_fee}
+                onChange={handleChange}
+              />
+              <p className="text-xs text-secondary-500 mt-1">
+                Optional fee for equipment transportation/setup costs
+              </p>
             </div>
 
             <div>
