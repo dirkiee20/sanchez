@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, TrendingUp, AlertTriangle, DollarSign, BarChart3, PieChart, Activity, Package, Users, CreditCard, Wrench } from 'lucide-react';
 import { reportService } from '../services/reportService';
 import { getIpc } from '../utils/electronUtils';
-import CustomReportBuilder from './CustomReportBuilder';
 
 function Reports() {
   const [selectedReport, setSelectedReport] = useState('');
@@ -13,7 +12,7 @@ function Reports() {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [databaseReady, setDatabaseReady] = useState(false);
-  const [activeTab, setActiveTab] = useState('standard'); // 'standard' or 'custom'
+  // Only standard reports now
 
   const reportTypes = [
     {
@@ -161,142 +160,109 @@ function Reports() {
         <p className="text-secondary-600">Generate and export business reports</p>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="border-b border-secondary-200">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('standard')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'standard'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-secondary-500 hover:text-secondary-700 hover:border-secondary-300'
-            }`}
-          >
-            Standard Reports
-          </button>
-          <button
-            onClick={() => setActiveTab('custom')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'custom'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-secondary-500 hover:text-secondary-700 hover:border-secondary-300'
-            }`}
-          >
-            Custom Report Builder
-          </button>
-        </nav>
+      {/* Report Selection */}
+      <div className="card p-6">
+        <h2 className="text-lg font-semibold text-secondary-900 mb-4">Select Report Type</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {reportTypes.map((report) => {
+            const Icon = report.icon;
+            return (
+              <div
+                key={report.id}
+                className={`p-4 border-2 rounded-lg cursor-pointer transition-colors duration-200 ${
+                  selectedReport === report.id
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-secondary-200 hover:border-secondary-300'
+                }`}
+                onClick={() => setSelectedReport(report.id)}
+              >
+                <div className="flex items-center mb-2">
+                  <Icon className="h-5 w-5 text-primary-600 mr-2" />
+                  <h3 className="font-medium text-secondary-900">{report.name}</h3>
+                </div>
+                <p className="text-sm text-secondary-600">{report.description}</p>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'standard' ? (
-        <div className="space-y-6">
-          {/* Report Selection */}
-          <div className="card p-6">
-            <h2 className="text-lg font-semibold text-secondary-900 mb-4">Select Report Type</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {reportTypes.map((report) => {
-                const Icon = report.icon;
-                return (
-                  <div
-                    key={report.id}
-                    className={`p-4 border-2 rounded-lg cursor-pointer transition-colors duration-200 ${
-                      selectedReport === report.id
-                        ? 'border-primary-500 bg-primary-50'
-                        : 'border-secondary-200 hover:border-secondary-300'
-                    }`}
-                    onClick={() => setSelectedReport(report.id)}
-                  >
-                    <div className="flex items-center mb-2">
-                      <Icon className="h-5 w-5 text-primary-600 mr-2" />
-                      <h3 className="font-medium text-secondary-900">{report.name}</h3>
-                    </div>
-                    <p className="text-sm text-secondary-600">{report.description}</p>
-                  </div>
-                );
-              })}
-            </div>
+      {/* Date Range Selection */}
+      <div className="card p-6">
+        <h2 className="text-lg font-semibold text-secondary-900 mb-4">Date Range</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-secondary-700 mb-1">
+              Start Date
+            </label>
+            <input
+              type="date"
+              className="input-field"
+              value={dateRange.startDate}
+              onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
+            />
           </div>
-
-          {/* Date Range Selection */}
-          <div className="card p-6">
-            <h2 className="text-lg font-semibold text-secondary-900 mb-4">Date Range</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={dateRange.startDate}
-                  onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={dateRange.endDate}
-                  onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="card p-6">
-            <div className="flex flex-wrap gap-4">
-              <button
-                onClick={handleGenerateReport}
-                className="btn-primary flex items-center"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Generate Report
-              </button>
-
-              <button
-                onClick={handleExportPDF}
-                className="btn-secondary flex items-center"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export PDF
-              </button>
-
-              <button
-                onClick={handleExportExcel}
-                className="btn-secondary flex items-center"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export Excel
-              </button>
-            </div>
-          </div>
-
-          {/* Report Preview */}
-          <div className="card p-6">
-            <h2 className="text-lg font-semibold text-secondary-900 mb-4">Report Preview</h2>
-            {loading ? (
-              <div className="flex items-center justify-center h-32">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-                <span className="ml-2 text-secondary-600">Generating report...</span>
-              </div>
-            ) : reportData ? (
-              <ReportVisualization data={reportData} />
-            ) : (
-              <div className="bg-secondary-50 rounded-lg p-4">
-                <p className="text-secondary-600 text-center">
-                  Select a report type and click "Generate Report" to view results
-                </p>
-              </div>
-            )}
+          <div>
+            <label className="block text-sm font-medium text-secondary-700 mb-1">
+              End Date
+            </label>
+            <input
+              type="date"
+              className="input-field"
+              value={dateRange.endDate}
+              onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
+            />
           </div>
         </div>
-      ) : (
-        <CustomReportBuilder />
-      )}
+      </div>
+
+      {/* Action Buttons */}
+      <div className="card p-6">
+        <div className="flex flex-wrap gap-4">
+          <button
+            onClick={handleGenerateReport}
+            className="btn-primary flex items-center"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Generate Report
+          </button>
+
+          <button
+            onClick={handleExportPDF}
+            className="btn-secondary flex items-center"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export PDF
+          </button>
+
+          <button
+            onClick={handleExportExcel}
+            className="btn-secondary flex items-center"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export Excel
+          </button>
+        </div>
+      </div>
+
+      {/* Report Preview */}
+      <div className="card p-6">
+        <h2 className="text-lg font-semibold text-secondary-900 mb-4">Report Preview</h2>
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            <span className="ml-2 text-secondary-600">Generating report...</span>
+          </div>
+        ) : reportData ? (
+          <ReportVisualization data={reportData} />
+        ) : (
+          <div className="bg-secondary-50 rounded-lg p-4">
+            <p className="text-secondary-600 text-center">
+              Select a report type and click "Generate Report" to view results
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
