@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Package, Edit, Trash2, Search, Clock, AlertTriangle, User, Phone, RotateCcw, CreditCard } from 'lucide-react';
+import { Plus, Calendar, Package, Edit, Trash2, Search, Clock, AlertTriangle, User, Phone, RotateCcw, CreditCard, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { rentalService } from '../services/rentalService';
@@ -415,6 +415,13 @@ function Rentals() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
+                      <button
+                        onClick={() => navigate(`/rentals/${rental.id}`)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="View Transaction Details"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => handleEditRental(rental)}
                         className="text-primary-600 hover:text-primary-900"

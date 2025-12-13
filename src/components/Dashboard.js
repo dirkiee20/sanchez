@@ -14,9 +14,11 @@ import { getIpc } from '../utils/electronUtils';
 import RevenueChart from './RevenueChart';
 import EquipmentChart from './EquipmentChart';
 import PaymentChart from './PaymentChart';
+import { useAuth } from '../contexts/AuthContext';
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     totalClients: 0,
     totalEquipment: 0,
@@ -156,7 +158,7 @@ function Dashboard() {
     loadDashboardData();
   }, [databaseReady]);
 
-  const statCards = [
+  const allStatCards = [
     {
       title: 'Total Clients',
       value: stats.totalClients,
@@ -187,7 +189,8 @@ function Dashboard() {
       icon: DollarSign,
       color: 'bg-purple-500',
       textColor: 'text-purple-600',
-      change: stats.trends?.totalRevenue || '0%'
+      change: stats.trends?.totalRevenue || '0%',
+      adminOnly: true
     },
     {
       title: 'Overdue Rentals',
@@ -206,6 +209,14 @@ function Dashboard() {
       change: stats.trends?.availableEquipment || '0%'
     }
   ];
+
+  // Filter stat cards based on user role
+  const statCards = allStatCards.filter(card => {
+    if (card.adminOnly && user?.role !== 'admin') {
+      return false;
+    }
+    return true;
+  });
 
   if (loading) {
     return (
@@ -257,13 +268,15 @@ function Dashboard() {
       {/* Charts Section */}
       {databaseReady && (
         <div className="grid grid-cols-1 xl:grid-cols-8 gap-6">
-          <div className="xl:col-span-8">
-            <RevenueChart />
-          </div>
-          <div className="xl:col-span-5">
+          {user?.role === 'admin' && (
+            <div className="xl:col-span-8">
+              <RevenueChart />
+            </div>
+          )}
+          <div className={user?.role === 'admin' ? 'xl:col-span-5' : 'xl:col-span-8'}>
             <EquipmentChart />
           </div>
-          <div className="xl:col-span-3">
+          <div className={user?.role === 'admin' ? 'xl:col-span-3' : 'xl:col-span-8'}>
             <PaymentChart />
           </div>
         </div>

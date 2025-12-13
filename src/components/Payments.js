@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, CreditCard, DollarSign, Receipt, Calendar, Edit, Trash2, Search, User, Phone } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Plus, CreditCard, DollarSign, Receipt, Edit, Trash2, Search, Eye } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { paymentService } from '../services/paymentService';
 import { rentalService } from '../services/rentalService';
 import Pagination from './Pagination';
@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 function Payments() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [payments, setPayments] = useState([]);
   const [rentals, setRentals] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -28,6 +29,7 @@ function Payments() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -138,12 +140,6 @@ function Payments() {
     // Don't open the modal immediately - just set the rental for the Payments component
   };
 
-  const handleRentalSelected = (rental) => {
-    setSelectedRental(rental);
-    setShowRentalModal(false);
-    // Don't automatically open the payment modal - just set the rental for later use
-  };
-
   const handleEditPayment = (payment) => {
     setEditingPayment(payment);
     setShowModal(true);
@@ -191,7 +187,7 @@ function Payments() {
       </div>
 
       {/* Payment Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 ${user?.role === 'admin' ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6`}>
         <div className="card p-6">
           <div className="flex items-center">
             <div className="p-3 bg-green-500 rounded-lg">
@@ -216,17 +212,19 @@ function Payments() {
           </div>
         </div>
 
-        <div className="card p-6">
-          <div className="flex items-center">
-            <div className="p-3 bg-yellow-500 rounded-lg">
-              <Receipt className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-secondary-600">Outstanding</p>
-              <p className="text-2xl font-bold text-secondary-900">₱{paymentStats.outstanding.toFixed(2)}</p>
+        {user?.role === 'admin' && (
+          <div className="card p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-yellow-500 rounded-lg">
+                <Receipt className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-secondary-600">Outstanding</p>
+                <p className="text-2xl font-bold text-secondary-900">₱{paymentStats.outstanding.toFixed(2)}</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Payments Table */}
@@ -254,6 +252,9 @@ function Payments() {
                   Equipment
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  Notes
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -261,10 +262,17 @@ function Payments() {
             <tbody className="bg-white divide-y divide-secondary-200">
               {filteredPayments.map((payment) => {
                 const rental = (Array.isArray(rentals) ? rentals : []).find(r => r.id === payment.rental_id);
+                const isDamageCharge = payment.notes && payment.notes.includes('Damage charges from return');
                 return (
                   <tr key={payment.id} className="table-row">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-secondary-900">
-                      #{payment.rental_id}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => navigate(`/rentals/${payment.rental_id}`)}
+                        className="text-blue-600 hover:text-blue-900 hover:underline"
+                        title="View Transaction Details"
+                      >
+                        #{payment.rental_id}
+                      </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">
                       {rental?.client_name || 'Unknown Client'}
@@ -283,11 +291,28 @@ function Payments() {
                     <td className="px-6 py-4 text-sm text-secondary-900">
                       {rental?.equipment_name || 'Unknown Equipment'}
                     </td>
+                    <td className="px-6 py-4 text-sm text-secondary-600">
+                      {payment.notes ? (
+                        <span className={isDamageCharge ? 'text-orange-600 font-medium' : ''}>
+                          {payment.notes}
+                        </span>
+                      ) : (
+                        <span className="text-secondary-400">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
                         <button
+                          onClick={() => navigate(`/rentals/${payment.rental_id}`)}
+                          className="text-blue-600 hover:text-blue-900"
+                          title="View Transaction Details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
                           onClick={() => handleEditPayment(payment)}
                           className="text-primary-600 hover:text-primary-900"
+                          title="Edit Payment"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
@@ -295,6 +320,7 @@ function Payments() {
                           <button
                             onClick={() => handleDeletePayment(payment.id)}
                             className="text-red-600 hover:text-red-900"
+                            title="Delete Payment"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -467,6 +493,7 @@ function PaymentModal({ payment, rentals, preSelectedRental, onClose, onSave, on
     if (selectedRental && formData.amount) {
       calculatePaymentType(selectedRental, formData.amount);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.amount, selectedRental]);
 
   const calculatePaymentType = async (rental, amount) => {

@@ -8,10 +8,14 @@ import {
   RotateCcw, 
   CreditCard, 
   FileText,
-  Settings
+  Settings,
+  Shield
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 function Sidebar() {
+  const { user } = useAuth();
+  
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Clients', href: '/clients', icon: Users },
@@ -21,6 +25,11 @@ function Sidebar() {
     { name: 'Payments', href: '/payments', icon: CreditCard },
     { name: 'Reports', href: '/reports', icon: FileText },
   ];
+
+  // Add Admin Settings only for admin users
+  if (user?.role === 'admin') {
+    navigation.push({ name: 'Admin Settings', href: '/admin-settings', icon: Shield });
+  }
 
   return (
     <div className="w-64 bg-white shadow-lg h-screen flex flex-col">
@@ -53,12 +62,6 @@ function Sidebar() {
         </div>
       </nav>
 
-      <div className="p-4 border-t border-secondary-200">
-        <div className="flex items-center">
-          <Settings className="h-5 w-5 text-secondary-400 mr-3" />
-          <span className="text-sm text-secondary-600">Settings</span>
-        </div>
-      </div>
     </div>
   );
 }

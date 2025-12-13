@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Login from './components/Login';
-import Signup from './components/Signup';
 import Dashboard from './components/Dashboard';
 import Clients from './components/Clients';
 import Equipment from './components/Equipment';
@@ -9,6 +8,9 @@ import Rentals from './components/Rentals';
 import Returns from './components/Returns';
 import Payments from './components/Payments';
 import Reports from './components/Reports';
+import AdminSettings from './components/AdminSettings';
+import ClientProfile from './components/ClientProfile';
+import TransactionDetail from './components/TransactionDetail';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -38,7 +40,6 @@ function AppContent() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
@@ -61,12 +62,24 @@ function AppContent() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/clients" element={<Clients />} />
+              <Route path="/clients/:id" element={<ClientProfile />} />
               <Route path="/equipment" element={<Equipment />} />
               <Route path="/rentals" element={<Rentals />} />
               <Route path="/rentals/new" element={<Rentals />} />
+              <Route path="/rentals/:id" element={<TransactionDetail />} />
               <Route path="/returns" element={<Returns />} />
               <Route path="/payments" element={<Payments />} />
               <Route path="/reports" element={<Reports />} />
+              <Route 
+                path="/admin-settings" 
+                element={
+                  user?.role === 'admin' ? (
+                    <AdminSettings />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                } 
+              />
             </Routes>
           </main>
         </div>

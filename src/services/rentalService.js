@@ -45,6 +45,15 @@ class RentalService {
       throw error;
     }
   }
+
+  async getRentalDetails(rentalId) {
+    try {
+      const ipc = getIpc();
+      return await ipc.invoke('db-get-rental-details', rentalId);
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

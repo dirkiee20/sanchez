@@ -431,8 +431,27 @@ function registerIPCHandlers() {
     }
   });
 
-  ipcMain.handle('db-register', async (event, userData) => {
+  ipcMain.handle('db-register', async (event, userData, adminUserId) => {
     try {
+      // Verify admin access
+      if (adminUserId) {
+        const [adminUsers] = await db.execute(
+          'SELECT role FROM users WHERE id = ?',
+          [adminUserId]
+        );
+
+        if (adminUsers.length === 0 || adminUsers[0].role !== 'admin') {
+          throw new Error('Unauthorized: Admin access required');
+        }
+      } else {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      // Only allow creating staff accounts
+      if (userData.role && userData.role !== 'staff') {
+        throw new Error('Only staff accounts can be created');
+      }
+
       const [existingUsers] = await db.execute(
         'SELECT id FROM users WHERE username = ?',
         [userData.username]
@@ -446,14 +465,180 @@ function registerIPCHandlers() {
 
       const [result] = await db.execute(
         'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-        [userData.username, hashedPassword, userData.role || 'staff']
+        [userData.username, hashedPassword, 'staff']
       );
 
       return {
         id: result.insertId,
         username: userData.username,
-        role: userData.role || 'staff'
+        role: 'staff'
       };
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  ipcMain.handle('db-get-users', async (event, adminUserId) => {
+    try {
+      // Verify admin access
+      if (adminUserId) {
+        const [adminUsers] = await db.execute(
+          'SELECT role FROM users WHERE id = ?',
+          [adminUserId]
+        );
+
+        if (adminUsers.length === 0 || adminUsers[0].role !== 'admin') {
+          throw new Error('Unauthorized: Admin access required');
+        }
+      } else {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      const [users] = await db.execute(
+        'SELECT id, username, role FROM users ORDER BY username ASC'
+      );
+
+      return users.map(user => ({
+        id: user.id,
+        username: user.username,
+        role: user.role
+      }));
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  ipcMain.handle('db-delete-user', async (event, userId, adminUserId) => {
+    try {
+      // Verify admin access
+      if (adminUserId) {
+        const [adminUsers] = await db.execute(
+          'SELECT role FROM users WHERE id = ?',
+          [adminUserId]
+        );
+
+        if (adminUsers.length === 0 || adminUsers[0].role !== 'admin') {
+          throw new Error('Unauthorized: Admin access required');
+        }
+      } else {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      // Prevent deleting admin accounts
+      const [targetUser] = await db.execute(
+        'SELECT role FROM users WHERE id = ?',
+        [userId]
+      );
+
+      if (targetUser.length === 0) {
+        throw new Error('User not found');
+      }
+
+      if (targetUser[0].role === 'admin') {
+        throw new Error('Cannot delete admin accounts');
+      }
+
+      // Prevent deleting yourself
+      if (userId === adminUserId) {
+        throw new Error('Cannot delete your own account');
+      }
+
+      await db.execute('DELETE FROM users WHERE id = ?', [userId]);
+
+      return { success: true };
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  ipcMain.handle('db-reset-user-password', async (event, userId, newPassword, adminUserId) => {
+    try {
+      // Verify admin access
+      if (adminUserId) {
+        const [adminUsers] = await db.execute(
+          'SELECT role FROM users WHERE id = ?',
+          [adminUserId]
+        );
+
+        if (adminUsers.length === 0 || adminUsers[0].role !== 'admin') {
+          throw new Error('Unauthorized: Admin access required');
+        }
+      } else {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      // Get target user
+      const [targetUser] = await db.execute(
+        'SELECT role FROM users WHERE id = ?',
+        [userId]
+      );
+
+      if (targetUser.length === 0) {
+        throw new Error('User not found');
+      }
+
+      // Hash the new password
+      const hashedPassword = bcrypt.hashSync(newPassword, 10);
+
+      // Update the password
+      await db.execute(
+        'UPDATE users SET password = ? WHERE id = ?',
+        [hashedPassword, userId]
+      );
+
+      return { success: true };
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  ipcMain.handle('db-promote-user-to-admin', async (event, userId, adminUserId) => {
+    try {
+      // Verify admin access
+      if (adminUserId) {
+        const [adminUsers] = await db.execute(
+          'SELECT role FROM users WHERE id = ?',
+          [adminUserId]
+        );
+
+        if (adminUsers.length === 0 || adminUsers[0].role !== 'admin') {
+          throw new Error('Unauthorized: Admin access required');
+        }
+      } else {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      // Get target user
+      const [targetUser] = await db.execute(
+        'SELECT role FROM users WHERE id = ?',
+        [userId]
+      );
+
+      if (targetUser.length === 0) {
+        throw new Error('User not found');
+      }
+
+      // Only allow promoting staff to admin
+      if (targetUser[0].role === 'admin') {
+        throw new Error('User is already an admin');
+      }
+
+      if (targetUser[0].role !== 'staff') {
+        throw new Error('Can only promote staff users to admin');
+      }
+
+      // Prevent promoting yourself
+      if (userId === adminUserId) {
+        throw new Error('Cannot promote your own account');
+      }
+
+      // Update the role to admin
+      await db.execute(
+        'UPDATE users SET role = ? WHERE id = ?',
+        ['admin', userId]
+      );
+
+      return { success: true };
     } catch (error) {
       throw error;
     }
@@ -869,8 +1054,50 @@ function registerIPCHandlers() {
               'INSERT INTO returns (rental_id, return_date, `condition`, damage_description, additional_charges, damaged_count, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
               [returnData.rental_id, returnData.return_date, returnData.condition, returnData.damage_description, returnData.additional_charges, returnData.damaged_count || 1, returnData.notes]
           );
-  
+
           await connection.execute('UPDATE rentals SET status = ? WHERE id = ?', ['returned', returnData.rental_id]);
+
+          // If there are additional charges, create a payment record automatically
+          const additionalCharges = parseFloat(returnData.additional_charges || 0);
+          if (additionalCharges > 0) {
+              // Get current rental data to determine payment type
+              const [rentalRows] = await connection.execute('SELECT total_amount, total_paid FROM rentals WHERE id = ? FOR UPDATE', [returnData.rental_id]);
+              const rental = rentalRows[0];
+              
+              const currentTotalPaid = parseFloat(rental.total_paid || 0);
+              const totalAmount = parseFloat(rental.total_amount);
+              const newTotalPaid = currentTotalPaid + additionalCharges;
+
+              // Determine payment type
+              let paymentType;
+              if (newTotalPaid >= totalAmount) {
+                  paymentType = 'full';
+              } else {
+                  paymentType = 'partial';
+              }
+
+              // Create payment record for damage charges
+              const damageNotes = `Damage charges from return${returnData.damage_description ? ': ' + returnData.damage_description : ''}`;
+              await connection.execute(
+                  'INSERT INTO payments (rental_id, amount, payment_type, payment_date, notes) VALUES (?, ?, ?, ?, ?)',
+                  [returnData.rental_id, additionalCharges, paymentType, returnData.return_date, damageNotes]
+              );
+
+              // Update rental's total_paid and payment_status
+              let rentalPaymentStatus;
+              if (newTotalPaid >= totalAmount) {
+                  rentalPaymentStatus = 'paid';
+              } else if (newTotalPaid > 0) {
+                  rentalPaymentStatus = 'partial';
+              } else {
+                  rentalPaymentStatus = 'unpaid';
+              }
+
+              await connection.execute(
+                  'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
+                  [newTotalPaid, rentalPaymentStatus, returnData.rental_id]
+              );
+          }
   
           const [equipmentRows] = await connection.execute('SELECT equipment_id, quantity FROM rentals WHERE id = ?', [returnData.rental_id]);
           const r = equipmentRows[0];
@@ -911,35 +1138,243 @@ function registerIPCHandlers() {
   });
 
   ipcMain.handle('db-update-return', async (event, id, returnData) => {
+    // Use database transaction to handle payment updates
+    const connection = db;
+    await connection.beginTransaction();
+
     try {
-      const [result] = await db.execute(
+      // Get the old return data to compare additional_charges
+      const [oldReturnRows] = await connection.execute('SELECT rental_id, additional_charges FROM returns WHERE id = ?', [id]);
+      const oldReturn = oldReturnRows[0];
+
+      if (!oldReturn) {
+        await connection.rollback();
+        throw new Error('Return not found');
+      }
+
+      // Update the return record
+      const [result] = await connection.execute(
         'UPDATE returns SET return_date = ?, `condition` = ?, damage_description = ?, additional_charges = ?, notes = ? WHERE id = ?',
         [returnData.return_date, returnData.condition, returnData.damage_description, returnData.additional_charges, returnData.notes, id]
       );
+
+      const oldCharges = parseFloat(oldReturn.additional_charges || 0);
+      const newCharges = parseFloat(returnData.additional_charges || 0);
+      const rentalId = oldReturn.rental_id;
+
+      // If additional charges changed, update the payment record
+      if (oldCharges !== newCharges) {
+        // Find existing damage charge payment for this rental
+        const [existingPayments] = await connection.execute(
+          'SELECT id, amount FROM payments WHERE rental_id = ? AND notes LIKE ?',
+          [rentalId, '%Damage charges from return%']
+        );
+
+        // Get current rental data
+        const [rentalRows] = await connection.execute('SELECT total_amount, total_paid FROM rentals WHERE id = ? FOR UPDATE', [rentalId]);
+        const rental = rentalRows[0];
+        const currentTotalPaid = parseFloat(rental.total_paid || 0);
+        const totalAmount = parseFloat(rental.total_amount);
+
+        if (existingPayments.length > 0) {
+          // Update existing damage charge payment
+          const existingPayment = existingPayments[0];
+          const oldPaymentAmount = parseFloat(existingPayment.amount);
+          const difference = newCharges - oldCharges;
+          const newTotalPaid = currentTotalPaid + difference;
+
+          if (newCharges > 0) {
+            // Update the payment amount
+            const damageNotes = `Damage charges from return${returnData.damage_description ? ': ' + returnData.damage_description : ''}`;
+            await connection.execute(
+              'UPDATE payments SET amount = ?, payment_date = ?, notes = ? WHERE id = ?',
+              [newCharges, returnData.return_date, damageNotes, existingPayment.id]
+            );
+          } else {
+            // Remove the payment if charges are now 0
+            await connection.execute('DELETE FROM payments WHERE id = ?', [existingPayment.id]);
+          }
+
+          // Update rental's total_paid and payment_status
+          let rentalPaymentStatus;
+          if (newTotalPaid >= totalAmount) {
+            rentalPaymentStatus = 'paid';
+          } else if (newTotalPaid > 0) {
+            rentalPaymentStatus = 'partial';
+          } else {
+            rentalPaymentStatus = 'unpaid';
+          }
+
+          await connection.execute(
+            'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
+            [newTotalPaid, rentalPaymentStatus, rentalId]
+          );
+        } else if (newCharges > 0) {
+          // Create new payment if charges were added and no existing payment found
+          const newTotalPaid = currentTotalPaid + newCharges;
+          
+          let paymentType;
+          if (newTotalPaid >= totalAmount) {
+            paymentType = 'full';
+          } else {
+            paymentType = 'partial';
+          }
+
+          const damageNotes = `Damage charges from return${returnData.damage_description ? ': ' + returnData.damage_description : ''}`;
+          await connection.execute(
+            'INSERT INTO payments (rental_id, amount, payment_type, payment_date, notes) VALUES (?, ?, ?, ?, ?)',
+            [rentalId, newCharges, paymentType, returnData.return_date, damageNotes]
+          );
+
+          // Update rental's total_paid and payment_status
+          let rentalPaymentStatus;
+          if (newTotalPaid >= totalAmount) {
+            rentalPaymentStatus = 'paid';
+          } else if (newTotalPaid > 0) {
+            rentalPaymentStatus = 'partial';
+          } else {
+            rentalPaymentStatus = 'unpaid';
+          }
+
+          await connection.execute(
+            'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
+            [newTotalPaid, rentalPaymentStatus, rentalId]
+          );
+        }
+      }
+
+      await connection.commit();
       return { changes: result.affectedRows };
     } catch (error) {
+      await connection.rollback();
       throw error;
     }
   });
 
   ipcMain.handle('db-delete-return', async (event, id) => {
+    // Use database transaction to handle payment updates
+    const connection = db;
+    await connection.beginTransaction();
+
     try {
-      const [returnRows] = await db.execute('SELECT rental_id FROM returns WHERE id = ?', [id]);
+      const [returnRows] = await connection.execute('SELECT rental_id, additional_charges FROM returns WHERE id = ?', [id]);
       const returnRecord = returnRows[0];
 
-      const [result] = await db.execute('DELETE FROM returns WHERE id = ?', [id]);
+      if (!returnRecord) {
+        await connection.rollback();
+        throw new Error('Return not found');
+      }
+
+      const [result] = await connection.execute('DELETE FROM returns WHERE id = ?', [id]);
 
       if (returnRecord) {
-        await db.execute('UPDATE rentals SET status = ? WHERE id = ?', ['active', returnRecord.rental_id]);
-        await db.execute(`
+        // If there were additional charges, remove the associated payment
+        const additionalCharges = parseFloat(returnRecord.additional_charges || 0);
+        if (additionalCharges > 0) {
+          // Find and delete the damage charge payment
+          const [damagePayments] = await connection.execute(
+            'SELECT id, amount FROM payments WHERE rental_id = ? AND notes LIKE ?',
+            [returnRecord.rental_id, '%Damage charges from return%']
+          );
+
+          if (damagePayments.length > 0) {
+            const damagePayment = damagePayments[0];
+            const paymentAmount = parseFloat(damagePayment.amount);
+            
+            // Delete the payment
+            await connection.execute('DELETE FROM payments WHERE id = ?', [damagePayment.id]);
+
+            // Update rental's total_paid and payment_status
+            const [rentalRows] = await connection.execute('SELECT total_amount, total_paid FROM rentals WHERE id = ? FOR UPDATE', [returnRecord.rental_id]);
+            const rental = rentalRows[0];
+            const currentTotalPaid = parseFloat(rental.total_paid || 0);
+            const newTotalPaid = Math.max(0, currentTotalPaid - paymentAmount);
+            const totalAmount = parseFloat(rental.total_amount);
+
+            let rentalPaymentStatus;
+            if (newTotalPaid >= totalAmount) {
+              rentalPaymentStatus = 'paid';
+            } else if (newTotalPaid > 0) {
+              rentalPaymentStatus = 'partial';
+            } else {
+              rentalPaymentStatus = 'unpaid';
+            }
+
+            await connection.execute(
+              'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
+              [newTotalPaid, rentalPaymentStatus, returnRecord.rental_id]
+            );
+          }
+        }
+
+        await connection.execute('UPDATE rentals SET status = ? WHERE id = ?', ['active', returnRecord.rental_id]);
+        await connection.execute(`
           UPDATE equipment
           SET status = ?
           WHERE id = (SELECT equipment_id FROM rentals WHERE id = ?)
         `, ['rented', returnRecord.rental_id]);
       }
 
+      await connection.commit();
       return { changes: result.affectedRows };
     } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
+  });
+
+  ipcMain.handle('db-get-rental-details', async (event, rentalId) => {
+    try {
+      console.log('Electron: Getting rental details for ID:', rentalId);
+      const startTime = performance.now();
+
+      // Get rental details with client and equipment info
+      const [rentalRows] = await db.execute(`
+        SELECT r.*, 
+               c.name as client_name, 
+               c.contact_number, 
+               c.email, 
+               c.address, 
+               c.project_site,
+               e.name as equipment_name, 
+               e.type as equipment_type,
+               e.description as equipment_description
+        FROM rentals r
+        JOIN clients c ON r.client_id = c.id
+        JOIN equipment e ON r.equipment_id = e.id
+        WHERE r.id = ?
+      `, [rentalId]);
+
+      if (rentalRows.length === 0) {
+        throw new Error('Rental not found');
+      }
+
+      const rental = rentalRows[0];
+
+      // Get all payments for this rental
+      const [payments] = await db.execute(`
+        SELECT * FROM payments 
+        WHERE rental_id = ? 
+        ORDER BY payment_date ASC
+      `, [rentalId]);
+
+      // Get return information for this rental
+      const [returns] = await db.execute(`
+        SELECT * FROM returns 
+        WHERE rental_id = ? 
+        ORDER BY return_date DESC
+      `, [rentalId]);
+
+      const endTime = performance.now();
+      console.log(`Electron: Rental details query completed in ${endTime - startTime}ms`);
+
+      return {
+        rental,
+        payments,
+        return: returns.length > 0 ? returns[0] : null
+      };
+    } catch (error) {
+      console.error('Electron: Error getting rental details:', error);
       throw error;
     }
   });
@@ -1261,6 +1696,75 @@ function registerIPCHandlers() {
           await connection.rollback();
           throw error;
       }
+  });
+
+  ipcMain.handle('db-get-client-profile', async (event, clientId) => {
+    try {
+      console.log('Electron: Getting client profile for ID:', clientId);
+      const startTime = performance.now();
+
+      // Get client details
+      const [clientRows] = await db.execute('SELECT * FROM clients WHERE id = ?', [clientId]);
+      if (clientRows.length === 0) {
+        throw new Error('Client not found');
+      }
+      const client = clientRows[0];
+
+      // Get all rentals for this client
+      const [rentals] = await db.execute(`
+        SELECT r.*, e.name as equipment_name, e.type as equipment_type
+        FROM rentals r
+        JOIN equipment e ON r.equipment_id = e.id
+        WHERE r.client_id = ?
+        ORDER BY r.created_at DESC
+      `, [clientId]);
+
+      // Get all payments for this client's rentals
+      const rentalIds = rentals.map(r => r.id);
+      let payments = [];
+      if (rentalIds.length > 0) {
+        const placeholders = rentalIds.map(() => '?').join(',');
+        const [paymentRows] = await db.execute(`
+          SELECT p.*, r.client_id, c.name as client_name, e.name as equipment_name
+          FROM payments p
+          JOIN rentals r ON p.rental_id = r.id
+          JOIN clients c ON r.client_id = c.id
+          JOIN equipment e ON r.equipment_id = e.id
+          WHERE p.rental_id IN (${placeholders})
+          ORDER BY p.payment_date DESC
+        `, rentalIds);
+        payments = paymentRows;
+      }
+
+      // Get all returns for this client's rentals
+      let returns = [];
+      if (rentalIds.length > 0) {
+        const placeholders = rentalIds.map(() => '?').join(',');
+        const [returnRows] = await db.execute(`
+          SELECT ret.*, r.client_id, c.name as client_name, e.name as equipment_name, e.type as equipment_type
+          FROM returns ret
+          JOIN rentals r ON ret.rental_id = r.id
+          JOIN clients c ON r.client_id = c.id
+          JOIN equipment e ON r.equipment_id = e.id
+          WHERE ret.rental_id IN (${placeholders})
+          ORDER BY ret.return_date DESC
+        `, rentalIds);
+        returns = returnRows;
+      }
+
+      const endTime = performance.now();
+      console.log(`Electron: Client profile query completed in ${endTime - startTime}ms`);
+
+      return {
+        client,
+        rentals,
+        payments,
+        returns
+      };
+    } catch (error) {
+      console.error('Electron: Error getting client profile:', error);
+      throw error;
+    }
   });
 
   ipcMain.handle('db-get-payments-by-rental', async (event, rentalId) => {
@@ -1748,7 +2252,7 @@ function registerIPCHandlers() {
       let dateFilter = '';
       let dateParams = [];
       if (startDate && endDate) {
-        dateFilter = 'WHERE ret.created_at BETWEEN ? AND ?';
+        dateFilter = 'AND ret.created_at BETWEEN ? AND ?';
         dateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
       }
 

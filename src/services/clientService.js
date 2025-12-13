@@ -48,6 +48,15 @@ class ClientService {
       throw error;
     }
   }
+
+  async getClientProfile(clientId) {
+    try {
+      const ipc = getIpc();
+      return await ipc.invoke('db-get-client-profile', clientId);
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

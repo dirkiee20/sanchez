@@ -139,15 +139,6 @@ function Login() {
             </button>
           </div>
 
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => navigate('/signup')}
-              className="text-sm text-primary-600 hover:text-primary-500 font-medium"
-            >
-              Don't have an account? Sign up
-            </button>
-          </div>
         </form>
       </div>
     </div>

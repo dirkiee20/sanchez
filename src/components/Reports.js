@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, TrendingUp, AlertTriangle, DollarSign, BarChart3, PieChart, Activity, Package, Users, CreditCard, Wrench } from 'lucide-react';
 import { reportService } from '../services/reportService';
 import { getIpc } from '../utils/electronUtils';
+import { useAuth } from '../contexts/AuthContext';
 
 function Reports() {
+  const { user } = useAuth();
   const [selectedReport, setSelectedReport] = useState('');
   const [dateRange, setDateRange] = useState({
     startDate: '',
@@ -254,7 +256,7 @@ function Reports() {
             <span className="ml-2 text-secondary-600">Generating report...</span>
           </div>
         ) : reportData ? (
-          <ReportVisualization data={reportData} />
+          <ReportVisualization data={reportData} userRole={user?.role} />
         ) : (
           <div className="bg-secondary-50 rounded-lg p-4">
             <p className="text-secondary-600 text-center">
@@ -268,7 +270,7 @@ function Reports() {
 }
 
 // Report Visualization Component
-function ReportVisualization({ data }) {
+function ReportVisualization({ data, userRole }) {
   const renderEquipmentUtilization = () => (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -354,22 +356,26 @@ function ReportVisualization({ data }) {
   const renderIncomeSummary = () => (
     <div className="space-y-6">
       {/* Overall Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card p-4 text-center">
-          <DollarSign className="h-8 w-8 mx-auto mb-2 text-green-600" />
-          <p className="text-2xl font-bold text-green-600">₱{data.overallStats.total_revenue}</p>
-          <p className="text-sm text-secondary-600">Total Revenue</p>
-        </div>
+      <div className={`grid grid-cols-1 ${userRole === 'admin' ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-4`}>
+        {userRole === 'admin' && (
+          <div className="card p-4 text-center">
+            <DollarSign className="h-8 w-8 mx-auto mb-2 text-green-600" />
+            <p className="text-2xl font-bold text-green-600">₱{data.overallStats.total_revenue}</p>
+            <p className="text-sm text-secondary-600">Total Revenue</p>
+          </div>
+        )}
         <div className="card p-4 text-center">
           <CreditCard className="h-8 w-8 mx-auto mb-2 text-blue-600" />
           <p className="text-2xl font-bold text-blue-600">₱{data.overallStats.total_paid}</p>
           <p className="text-sm text-secondary-600">Total Paid</p>
         </div>
-        <div className="card p-4 text-center">
-          <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-red-600" />
-          <p className="text-2xl font-bold text-red-600">₱{data.overallStats.total_outstanding}</p>
-          <p className="text-sm text-secondary-600">Outstanding</p>
-        </div>
+        {userRole === 'admin' && (
+          <div className="card p-4 text-center">
+            <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-red-600" />
+            <p className="text-2xl font-bold text-red-600">₱{data.overallStats.total_outstanding}</p>
+            <p className="text-sm text-secondary-600">Outstanding</p>
+          </div>
+        )}
         <div className="card p-4 text-center">
           <FileText className="h-8 w-8 mx-auto mb-2 text-purple-600" />
           <p className="text-2xl font-bold text-purple-600">{data.overallStats.total_rentals}</p>

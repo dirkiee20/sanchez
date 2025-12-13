@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin, FileText } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin, FileText, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { clientService } from '../services/clientService';
 import { getIpc } from '../utils/electronUtils';
@@ -201,6 +201,13 @@ function Clients() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
+                      <button
+                        onClick={() => navigate(`/clients/${client.id}`)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="View Client Profile"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => handleEditClient(client)}
                         className="text-primary-600 hover:text-primary-900"

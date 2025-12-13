@@ -38,10 +38,10 @@ class AuthService {
     return this.currentUser || null;
   }
 
-  async createUser(username, password, role) {
+  async createUser(username, password, role, adminUserId) {
     try {
       const ipc = getIpc();
-      const user = await ipc.invoke('db-register', { username, password, role });
+      const user = await ipc.invoke('db-register', { username, password, role }, adminUserId);
       return user;
     } catch (error) {
       throw error;
@@ -53,14 +53,44 @@ class AuthService {
     throw new Error('User update not implemented yet');
   }
 
-  async getAllUsers() {
-    // This would need to be implemented in the main process
-    throw new Error('Get all users not implemented yet');
+  async getAllUsers(adminUserId) {
+    try {
+      const ipc = getIpc();
+      const users = await ipc.invoke('db-get-users', adminUserId);
+      return users;
+    } catch (error) {
+      throw error;
+    }
   }
 
-  async deleteUser(id) {
-    // This would need to be implemented in the main process
-    throw new Error('User deletion not implemented yet');
+  async deleteUser(userId, adminUserId) {
+    try {
+      const ipc = getIpc();
+      const result = await ipc.invoke('db-delete-user', userId, adminUserId);
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async resetUserPassword(userId, newPassword, adminUserId) {
+    try {
+      const ipc = getIpc();
+      const result = await ipc.invoke('db-reset-user-password', userId, newPassword, adminUserId);
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async promoteUserToAdmin(userId, adminUserId) {
+    try {
+      const ipc = getIpc();
+      const result = await ipc.invoke('db-promote-user-to-admin', userId, adminUserId);
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 }
 
