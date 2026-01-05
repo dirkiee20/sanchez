@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Package, Edit, Trash2, Search, Clock, AlertTriangle, User, Phone, RotateCcw, CreditCard, FileText } from 'lucide-react';
+import { Plus, Calendar, Package, Edit, Trash2, Search, Clock, AlertTriangle, User, Phone, RotateCcw, CreditCard, FileText, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { rentalService } from '../services/rentalService';
@@ -171,7 +171,7 @@ function Rentals() {
   const handleDeleteRental = async (id) => {
     if (window.confirm('Are you sure you want to delete this rental?')) {
       try {
-        await rentalService.deleteRental(id);
+        await rentalService.deleteRental(id, user?.id);
         // Reload the data for current page
         const loadData = async (page = 1, status = statusFilter) => {
           try {
@@ -206,6 +206,8 @@ function Rentals() {
       }
     }
   };
+
+
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
@@ -394,7 +396,7 @@ function Rentals() {
                     <div className="flex items-center">
                       {getStatusIcon(rental.status)}
                       <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(rental.status)}`}>
-                        {rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
+                        {rental.status === 'active' ? 'Released' : rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
                       </span>
                     </div>
                   </td>
@@ -481,9 +483,9 @@ function Rentals() {
           onSave={async (rentalData) => {
             try {
               if (editingRental) {
-                await rentalService.updateRental(editingRental.id, rentalData);
+                await rentalService.updateRental(editingRental.id, rentalData, user?.id);
               } else {
-                await rentalService.addRental(rentalData);
+                await rentalService.addRental(rentalData, user?.id);
               }
               // Reload the data for current page
               const loadData = async (page = 1, status = statusFilter) => {
@@ -1162,6 +1164,7 @@ function RentalModal({ rental, clients, availableEquipment, preSelectedClient, p
                 <option value="active">Active</option>
                 <option value="overdue">Overdue</option>
                 <option value="returned">Returned</option>
+                <option value="released">Released</option>
               </select>
             </div>
           </div>

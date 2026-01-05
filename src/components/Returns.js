@@ -185,7 +185,7 @@ function Returns() {
   const handleDeleteReturn = async (id) => {
     if (window.confirm('Are you sure you want to delete this return record?')) {
       try {
-        await returnService.deleteReturn(id);
+        await returnService.deleteReturn(id, user?.id);
         await loadData(currentPage); // Reload the data for current page
       } catch (error) {
         console.error('Error deleting return:', error);
@@ -345,9 +345,9 @@ function Returns() {
           onSave={async (returnData) => {
             try {
               if (editingReturn) {
-                await returnService.updateReturn(editingReturn.id, returnData);
+                await returnService.updateReturn(editingReturn.id, returnData, user?.id);
               } else {
-                await returnService.addReturn(returnData);
+                await returnService.addReturn(returnData, user?.id);
               }
               await loadData(currentPage); // Reload the data for current page
               setShowModal(false);

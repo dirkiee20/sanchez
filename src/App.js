@@ -11,6 +11,7 @@ import Reports from './components/Reports';
 import AdminSettings from './components/AdminSettings';
 import ClientProfile from './components/ClientProfile';
 import TransactionDetail from './components/TransactionDetail';
+import ActivityLog from './components/ActivityLog';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -69,7 +70,10 @@ function AppContent() {
               <Route path="/rentals/:id" element={<TransactionDetail />} />
               <Route path="/returns" element={<Returns />} />
               <Route path="/payments" element={<Payments />} />
+              <Route path="/returns" element={<Returns />} />
+              <Route path="/payments" element={<Payments />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/activity-log" element={<ActivityLog />} />
               <Route 
                 path="/admin-settings" 
                 element={

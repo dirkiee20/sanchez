@@ -10,28 +10,30 @@ class PaymentService {
     }
   }
 
-  async addPayment(paymentData) {
+  async addPayment(paymentData, userId = null) {
     try {
       const ipc = getIpc();
-      return await ipc.invoke('db-add-payment', paymentData);
+      const dataWithUser = { ...paymentData, updated_by_user_id: userId };
+      return await ipc.invoke('db-add-payment', dataWithUser);
     } catch (error) {
       throw error;
     }
   }
 
-  async updatePayment(id, paymentData) {
+  async updatePayment(id, paymentData, userId = null) {
     try {
       const ipc = getIpc();
-      return await ipc.invoke('db-update-payment', id, paymentData);
+      const dataWithUser = { ...paymentData, updated_by_user_id: userId };
+      return await ipc.invoke('db-update-payment', id, dataWithUser);
     } catch (error) {
       throw error;
     }
   }
 
-  async deletePayment(id) {
+  async deletePayment(id, userId = null) {
     try {
       const ipc = getIpc();
-      return await ipc.invoke('db-delete-payment', id);
+      return await ipc.invoke('db-delete-payment', id, userId);
     } catch (error) {
       throw error;
     }

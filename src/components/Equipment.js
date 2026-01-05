@@ -11,6 +11,7 @@ function Equipment() {
   const [editingEquipment, setEditingEquipment] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [databaseReady, setDatabaseReady] = useState(false);
 
@@ -71,8 +72,11 @@ function Equipment() {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.type.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesType = typeFilter === 'all' || item.type === typeFilter;
+    return matchesSearch && matchesStatus && matchesType;
   });
+
+  const uniqueTypes = [...new Set(equipment.map(item => item.type))];
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -159,6 +163,16 @@ function Equipment() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="input-field w-48"
+        >
+          <option value="all">All Types</option>
+          {uniqueTypes.map(type => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}

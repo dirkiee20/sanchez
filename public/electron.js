@@ -900,6 +900,8 @@ function registerIPCHandlers() {
               `UPDATE equipment SET status = CASE WHEN quantity_available > 0 THEN 'available' ELSE 'rented' END WHERE id = ?`,
               [rentalData.equipment_id]
           );
+
+          await logActivity(rentalData.updated_by_user_id || null, 'Create Rental', 'rentals', result.insertId, null, { ...rentalData, id: result.insertId });
   
           await connection.commit();
           return { id: result.insertId };
@@ -911,23 +913,45 @@ function registerIPCHandlers() {
 
   ipcMain.handle('db-update-rental', async (event, id, rentalData) => {
     try {
+      // Get old values for logging
+      const [oldRows] = await db.execute('SELECT * FROM rentals WHERE id = ?', [id]);
+      const oldValues = oldRows[0];
+
       const [result] = await db.execute(
         'UPDATE rentals SET client_id = ?, equipment_id = ?, start_date = ?, end_date = ?, rate_per_hour = ?, total_amount = ?, status = ?, overnight_custody = ? WHERE id = ?',
         [rentalData.client_id, rentalData.equipment_id, rentalData.start_date, rentalData.end_date, rentalData.rate_per_hour, rentalData.total_amount, rentalData.status, rentalData.overnight_custody || 'owner', id]
       );
+
+      // Log activity
+      let action = 'Update Rental';
+      if (oldValues.status !== 'released' && rentalData.status === 'released') {
+         action = 'Release Rental';
+      }
+      
+      const changes = {};
+      // Calculate changes for relevant fields
+      ['client_id', 'equipment_id', 'start_date', 'end_date', 'rate_per_hour', 'total_amount', 'status', 'overnight_custody'].forEach(field => {
+        if (rentalData[field] != oldValues[field]) { // loose equality for string/number conversion
+             changes[field] = { old: oldValues[field], new: rentalData[field] };
+        }
+      });
+
+      // Pass passed-in User ID
+      await logActivity(rentalData.updated_by_user_id || null, action, 'rentals', id, oldValues, rentalData);
+
       return { changes: result.affectedRows };
     } catch (error) {
       throw error;
     }
   });
 
-  ipcMain.handle('db-delete-rental', async (event, id) => {
+  ipcMain.handle('db-delete-rental', async (event, id, userId = null) => {
       // Use database transaction to prevent race conditions
       const connection = db;
       await connection.beginTransaction();
   
       try {
-          const [rentalRows] = await connection.execute('SELECT equipment_id, quantity FROM rentals WHERE id = ?', [id]);
+          const [rentalRows] = await connection.execute('SELECT equipment_id, quantity, client_id, total_amount FROM rentals WHERE id = ?', [id]);
           const rental = rentalRows[0];
   
           const [result] = await connection.execute('DELETE FROM rentals WHERE id = ?', [id]);
@@ -943,6 +967,8 @@ function registerIPCHandlers() {
               const { quantity_total, quantity_available, maintenance_quantity } = statusCheck[0];
               const status = (quantity_available + maintenance_quantity) >= quantity_total ? 'available' : 'rented';
               await connection.execute('UPDATE equipment SET status = ? WHERE id = ?', [status, rental.equipment_id]);
+
+              await logActivity(userId, 'Delete Rental', 'rentals', id, rental, null);
           }
   
           await connection.commit();
@@ -1128,6 +1154,8 @@ function registerIPCHandlers() {
               const status = (quantity_available + maintenance_quantity) >= quantity_total ? 'available' : 'rented';
               await connection.execute('UPDATE equipment SET status = ? WHERE id = ?', [status, r.equipment_id]);
           }
+
+          await logActivity(returnData.updated_by_user_id || null, 'Process Return', 'returns', result.insertId, null, { ...returnData, id: result.insertId });
   
           await connection.commit();
           return { id: result.insertId };
@@ -1157,6 +1185,8 @@ function registerIPCHandlers() {
         'UPDATE returns SET return_date = ?, `condition` = ?, damage_description = ?, additional_charges = ?, notes = ? WHERE id = ?',
         [returnData.return_date, returnData.condition, returnData.damage_description, returnData.additional_charges, returnData.notes, id]
       );
+
+      await logActivity(returnData.updated_by_user_id || null, 'Update Return', 'returns', id, oldReturn, returnData);
 
       const oldCharges = parseFloat(oldReturn.additional_charges || 0);
       const newCharges = parseFloat(returnData.additional_charges || 0);
@@ -1251,7 +1281,7 @@ function registerIPCHandlers() {
     }
   });
 
-  ipcMain.handle('db-delete-return', async (event, id) => {
+  ipcMain.handle('db-delete-return', async (event, id, userId = null) => {
     // Use database transaction to handle payment updates
     const connection = db;
     await connection.beginTransaction();
@@ -1314,6 +1344,10 @@ function registerIPCHandlers() {
           WHERE id = (SELECT equipment_id FROM rentals WHERE id = ?)
         `, ['rented', returnRecord.rental_id]);
       }
+
+
+      
+      await logActivity(userId, 'Delete Return', 'returns', id, returnRecord, null);
 
       await connection.commit();
       return { changes: result.affectedRows };
@@ -1628,6 +1662,8 @@ function registerIPCHandlers() {
 
           console.log('Electron: Rental payment status updated successfully');
 
+          await logActivity(paymentData.updated_by_user_id || null, 'Process Payment', 'payments', result.insertId, null, { ...paymentData, id: result.insertId, payment_type: paymentType });
+
           await connection.commit();
           return { id: result.insertId, paymentType };
       } catch (error) {
@@ -1639,17 +1675,23 @@ function registerIPCHandlers() {
 
   ipcMain.handle('db-update-payment', async (event, id, paymentData) => {
     try {
+      const [oldRows] = await db.execute('SELECT * FROM payments WHERE id = ?', [id]);
+      const oldValues = oldRows[0];
+
       const [result] = await db.execute(
         'UPDATE payments SET rental_id = ?, amount = ?, payment_type = ?, payment_date = ?, notes = ? WHERE id = ?',
         [paymentData.rental_id, paymentData.amount, paymentData.payment_type, paymentData.payment_date, paymentData.notes, id]
       );
+
+      await logActivity(paymentData.updated_by_user_id || null, 'Update Payment', 'payments', id, oldValues, paymentData);
+
       return { changes: result.affectedRows };
     } catch (error) {
       throw error;
     }
   });
 
-  ipcMain.handle('db-delete-payment', async (event, id) => {
+  ipcMain.handle('db-delete-payment', async (event, id, userId = null) => {
       // Use database transaction to prevent race conditions
       const connection = db;
       await connection.beginTransaction();
@@ -1685,6 +1727,10 @@ function registerIPCHandlers() {
                       [newTotalPaid, paymentStatus, payment.rental_id]
                   );
               }
+  
+
+
+              await logActivity(userId, 'Delete Payment', 'payments', id, payment, null);
   
               await connection.commit();
               return { changes: result.affectedRows };
@@ -2014,7 +2060,7 @@ function registerIPCHandlers() {
           COUNT(DISTINCT CASE WHEN r.status = 'active' THEN r.equipment_id END) as currently_rented,
           COUNT(DISTINCT CASE WHEN r.status = 'returned' THEN r.equipment_id END) as returned_count,
           ROUND(AVG(r.rate_per_hour), 2) as avg_hourly_rate,
-          SUM(CASE WHEN r.status IN ('active', 'returned') THEN r.total_amount ELSE 0 END) as total_revenue
+          SUM(CASE WHEN r.status IN ('active', 'returned', 'released', 'overdue') THEN r.total_amount ELSE 0 END) as total_revenue
         FROM equipment e
         LEFT JOIN rentals r ON e.id = r.equipment_id
         ${dateFilter}
@@ -2435,6 +2481,49 @@ function registerIPCHandlers() {
       throw error;
     }
   });
+  // Helper function to log activity
+  async function logActivity(userId, action, tableName, recordId, oldValues, newValues) {
+    try {
+      await db.execute(
+        'INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values) VALUES (?, ?, ?, ?, ?, ?)',
+        [userId, action, tableName, recordId, JSON.stringify(oldValues), JSON.stringify(newValues)]
+      );
+    } catch (error) {
+      console.error('Error logging activity:', error);
+    }
+  }
+
+  ipcMain.handle('db-get-audit-logs', async (event, options = {}) => {
+    try {
+      const { page = 1, limit = 20 } = options;
+      const offset = (page - 1) * limit;
+
+      const [countResult] = await db.execute('SELECT COUNT(*) as total FROM audit_logs');
+      const totalItems = countResult[0].total;
+
+      const [rows] = await db.execute(`
+        SELECT l.*, u.username 
+        FROM audit_logs l 
+        LEFT JOIN users u ON l.user_id = u.id 
+        ORDER BY l.created_at DESC 
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+
+      return {
+        data: rows,
+        pagination: {
+          page,
+          limit,
+          totalItems,
+          totalPages: Math.ceil(totalItems / limit)
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      throw error;
+    }
+  });
+
 }
 
 async function initDatabase() {
@@ -2540,7 +2629,7 @@ async function createTables() {
       rate_per_hour DECIMAL(10,2) NOT NULL,
       total_amount DECIMAL(10,2) NOT NULL,
       quantity INT NOT NULL DEFAULT 1,
-      \`status\` ENUM('active', 'returned', 'overdue') NOT NULL,
+      \`status\` ENUM('active', 'returned', 'overdue', 'released') NOT NULL,
       payment_status ENUM('unpaid', 'partial', 'paid') NOT NULL DEFAULT 'unpaid',
       total_paid DECIMAL(10,2) NOT NULL DEFAULT 0,
       overnight_custody ENUM('owner', 'client') NOT NULL DEFAULT 'owner',
@@ -2659,6 +2748,9 @@ async function migrateSchema() {
     `);
 
     const rentalColNames = rentalColumns.map(row => row.COLUMN_NAME);
+
+    // Update status enum to include 'released'
+    await db.execute(`ALTER TABLE rentals MODIFY COLUMN status ENUM('active', 'returned', 'overdue', 'released') NOT NULL`);
 
     // Rename rate_per_day to rate_per_hour if it exists
     if (rentalColNames.includes('rate_per_day') && !rentalColNames.includes('rate_per_hour')) {

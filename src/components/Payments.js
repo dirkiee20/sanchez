@@ -148,7 +148,7 @@ function Payments() {
   const handleDeletePayment = async (id) => {
     if (window.confirm('Are you sure you want to delete this payment?')) {
       try {
-        await paymentService.deletePayment(id);
+        await paymentService.deletePayment(id, user?.id);
         await loadData(currentPage); // Reload the data for current page
       } catch (error) {
         console.error('Error deleting payment:', error);
@@ -348,9 +348,9 @@ function Payments() {
           onSave={async (paymentData) => {
             try {
               if (editingPayment) {
-                await paymentService.updatePayment(editingPayment.id, paymentData);
+                await paymentService.updatePayment(editingPayment.id, paymentData, user?.id);
               } else {
-                await paymentService.addPayment(paymentData);
+                await paymentService.addPayment(paymentData, user?.id);
               }
               await loadData(currentPage); // Reload the data for current page
               setShowModal(false);

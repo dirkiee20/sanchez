@@ -22,28 +22,30 @@ class ReturnService {
     }
   }
 
-  async addReturn(returnData) {
+  async addReturn(returnData, userId = null) {
     try {
       const ipc = getIpc();
-      return await ipc.invoke('db-add-return', returnData);
+      const dataWithUser = { ...returnData, updated_by_user_id: userId };
+      return await ipc.invoke('db-add-return', dataWithUser);
     } catch (error) {
       throw error;
     }
   }
 
-  async updateReturn(id, returnData) {
+  async updateReturn(id, returnData, userId = null) {
     try {
       const ipc = getIpc();
-      return await ipc.invoke('db-update-return', id, returnData);
+      const dataWithUser = { ...returnData, updated_by_user_id: userId };
+      return await ipc.invoke('db-update-return', id, dataWithUser);
     } catch (error) {
       throw error;
     }
   }
 
-  async deleteReturn(id) {
+  async deleteReturn(id, userId = null) {
     try {
       const ipc = getIpc();
-      return await ipc.invoke('db-delete-return', id);
+      return await ipc.invoke('db-delete-return', id, userId);
     } catch (error) {
       throw error;
     }

@@ -24,6 +24,7 @@ function Sidebar() {
     { name: 'Returns', href: '/returns', icon: RotateCcw },
     { name: 'Payments', href: '/payments', icon: CreditCard },
     { name: 'Reports', href: '/reports', icon: FileText },
+    { name: 'Activity Log', href: '/activity-log', icon: Shield },
   ];
 
   // Add Admin Settings only for admin users
