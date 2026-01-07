@@ -22,10 +22,11 @@ class ClientService {
     }
   }
 
-  async addClient(clientData) {
+  async addClient(clientData, userId = null) {
     try {
       const ipc = getIpc();
-      return await ipc.invoke('db-add-client', clientData);
+      const dataWithUser = { ...clientData, updated_by_user_id: userId };
+      return await ipc.invoke('db-add-client', dataWithUser);
     } catch (error) {
       throw error;
     }

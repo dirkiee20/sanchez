@@ -250,7 +250,7 @@ function Clients() {
               if (editingClient) {
                 await clientService.updateClient(editingClient.id, clientData);
               } else {
-                await clientService.addClient(clientData);
+                await clientService.addClient(clientData, user?.id);
               }
               await loadClients(currentPage); // Reload the list for current page
               setShowModal(false);

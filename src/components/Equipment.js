@@ -250,7 +250,7 @@ function Equipment() {
               if (editingEquipment) {
                 await equipmentService.updateEquipment(editingEquipment.id, equipmentData);
               } else {
-                await equipmentService.addEquipment(equipmentData);
+                await equipmentService.addEquipment(equipmentData, user?.id);
               }
               await loadEquipment(); // Reload the list
               setShowModal(false);

@@ -668,10 +668,30 @@ function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, on
                 <div>
                   <p><strong>Client:</strong> {selectedRental.client_name}</p>
                   <p><strong>Equipment:</strong> {selectedRental.equipment_name}</p>
-                </div>
-                <div>
                   <p><strong>Type:</strong> {selectedRental.equipment_type}</p>
                   <p><strong>Rate:</strong> ₱{selectedRental.rate_per_hour}/hour</p>
+                </div>
+                <div>
+                  {(() => {
+                    const totalAmount = parseFloat(selectedRental.total_amount || 0);
+                    const totalPaid = parseFloat(selectedRental.total_paid || 0);
+                    const balance = Math.max(0, totalAmount - totalPaid);
+                    return (
+                      <>
+                        <p><strong>Total Amount:</strong> ₱{totalAmount.toFixed(2)}</p>
+                        <p><strong>Total Paid:</strong> ₱{totalPaid.toFixed(2)}</p>
+                        <p className={balance > 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+                          <strong>Balance:</strong> ₱{balance.toFixed(2)}
+                        </p>
+                        <p>
+                          <strong>Payment Status:</strong>{' '}
+                          {selectedRental.payment_status
+                            ? selectedRental.payment_status.charAt(0).toUpperCase() + selectedRental.payment_status.slice(1)
+                            : 'N/A'}
+                        </p>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

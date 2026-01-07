@@ -693,6 +693,9 @@ function registerIPCHandlers() {
         'INSERT INTO clients (name, contact_number, email, project_site, address) VALUES (?, ?, ?, ?, ?)',
         [clientData.name, clientData.contact_number, clientData.email, clientData.project_site, clientData.address]
       );
+      
+      await logActivity(clientData.updated_by_user_id || null, 'Add Client', 'clients', result.insertId, null, { ...clientData, id: result.insertId });
+      
       return { id: result.insertId };
     } catch (error) {
       throw error;
@@ -751,6 +754,9 @@ function registerIPCHandlers() {
           quantityAvailable
         ]
       );
+      
+      await logActivity(equipmentData.updated_by_user_id || null, 'Add Equipment', 'equipment', result.insertId, null, { ...equipmentData, id: result.insertId, status });
+      
       return { id: result.insertId };
     } catch (error) {
       throw error;

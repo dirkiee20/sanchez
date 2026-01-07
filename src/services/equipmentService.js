@@ -22,10 +22,11 @@ class EquipmentService {
     }
   }
 
-  async addEquipment(equipmentData) {
+  async addEquipment(equipmentData, userId = null) {
     try {
       const ipc = getIpc();
-      return await ipc.invoke('db-add-equipment', equipmentData);
+      const dataWithUser = { ...equipmentData, updated_by_user_id: userId };
+      return await ipc.invoke('db-add-equipment', dataWithUser);
     } catch (error) {
       throw error;
     }
