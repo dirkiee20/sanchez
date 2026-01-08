@@ -795,6 +795,69 @@ function registerIPCHandlers() {
     }
   });
 
+  ipcMain.handle('db-update-equipment-maintenance', async (event, id, quantity, action, userId = null) => {
+    try {
+      // Get current equipment data
+      const [equipmentRows] = await db.execute(
+        'SELECT quantity_available, maintenance_quantity, quantity_total FROM equipment WHERE id = ?',
+        [id]
+      );
+      
+      if (equipmentRows.length === 0) {
+        throw new Error('Equipment not found');
+      }
+
+      const equipment = equipmentRows[0];
+      const currentAvailable = parseFloat(equipment.quantity_available || 0);
+      const currentMaintenance = parseFloat(equipment.maintenance_quantity || 0);
+      const totalQuantity = parseFloat(equipment.quantity_total || 0);
+      const quantityToMove = parseInt(quantity) || 1;
+
+      let newAvailable = currentAvailable;
+      let newMaintenance = currentMaintenance;
+
+      if (action === 'send_to_maintenance') {
+        // Move from available to maintenance
+        if (currentAvailable < quantityToMove) {
+          throw new Error(`Cannot send ${quantityToMove} items to maintenance. Only ${currentAvailable} available.`);
+        }
+        newAvailable = currentAvailable - quantityToMove;
+        newMaintenance = currentMaintenance + quantityToMove;
+      } else if (action === 'mark_as_repaired') {
+        // Move from maintenance back to available
+        if (currentMaintenance < quantityToMove) {
+          throw new Error(`Cannot mark ${quantityToMove} items as repaired. Only ${currentMaintenance} in maintenance.`);
+        }
+        newAvailable = currentAvailable + quantityToMove;
+        newMaintenance = currentMaintenance - quantityToMove;
+      } else {
+        throw new Error('Invalid action');
+      }
+
+      // Validate totals
+      if (newAvailable + newMaintenance > totalQuantity) {
+        throw new Error('Total available and maintenance quantities cannot exceed total quantity');
+      }
+
+      // Update equipment
+      const status = newAvailable > 0 ? 'available' : (newMaintenance >= totalQuantity ? 'maintenance' : 'rented');
+      const [result] = await db.execute(
+        'UPDATE equipment SET quantity_available = ?, maintenance_quantity = ?, status = ? WHERE id = ?',
+        [newAvailable, newMaintenance, status, id]
+      );
+
+      // Log activity
+      await logActivity(userId, `Update Equipment Maintenance (${action})`, 'equipment', id, 
+        { quantity_available: currentAvailable, maintenance_quantity: currentMaintenance },
+        { quantity_available: newAvailable, maintenance_quantity: newMaintenance, action, quantity: quantityToMove }
+      );
+
+      return { changes: result.affectedRows, newAvailable, newMaintenance };
+    } catch (error) {
+      throw error;
+    }
+  });
+
   ipcMain.handle('db-get-rentals', async (event, options = {}) => {
     try {
       console.log('Backend: db-get-rentals called with raw options:', options);
@@ -1474,10 +1537,16 @@ function registerIPCHandlers() {
       const [activeRentalsPrevResult] = await db.execute('SELECT COUNT(*) as count FROM rentals WHERE status = ? AND created_at < ?', ['active', thirtyDaysAgoStr]);
       const activeRentalsPrev = activeRentalsPrevResult[0].count;
 
-      const [revenueResult] = await db.execute('SELECT COALESCE(SUM(total_amount), 0) as total FROM rentals');
+      // Total revenue includes all payments (rental payments + damage charges)
+      const [revenueResult] = await db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments');
       const totalRevenue = parseFloat(revenueResult[0].total);
 
-      const [revenuePrevResult] = await db.execute('SELECT COALESCE(SUM(total_amount), 0) as total FROM rentals WHERE created_at < ?', [thirtyDaysAgoStr]);
+      const [revenuePrevResult] = await db.execute(`
+        SELECT COALESCE(SUM(p.amount), 0) as total 
+        FROM payments p
+        JOIN rentals r ON p.rental_id = r.id
+        WHERE r.created_at < ?
+      `, [thirtyDaysAgoStr]);
       const totalRevenuePrev = parseFloat(revenuePrevResult[0].total);
 
       const [overdueResult] = await db.execute('SELECT COUNT(*) as count FROM rentals WHERE status = ? AND end_date < CURDATE()', ['active']);
@@ -1874,14 +1943,15 @@ function registerIPCHandlers() {
 
       console.log('All rental dates in database:', allRentals);
 
+      // Revenue includes all payments (rental payments + damage charges)
       const [rows] = await db.execute(`
         SELECT
-          DATE_FORMAT(created_at, '${dateFormat}') as period,
-          SUM(total_amount) as revenue,
-          COUNT(*) as rental_count
-        FROM rentals
-        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL ${intervalValue} ${interval})
-        GROUP BY DATE_FORMAT(created_at, '${dateFormat}')
+          DATE_FORMAT(p.payment_date, '${dateFormat}') as period,
+          SUM(p.amount) as revenue,
+          COUNT(DISTINCT p.rental_id) as rental_count
+        FROM payments p
+        WHERE p.payment_date >= DATE_SUB(CURDATE(), INTERVAL ${intervalValue} ${interval})
+        GROUP BY DATE_FORMAT(p.payment_date, '${dateFormat}')
         ORDER BY period ASC
       `);
 
@@ -2058,7 +2128,14 @@ function registerIPCHandlers() {
         dateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
       }
 
-      // Equipment utilization by type
+      // Equipment utilization by type - revenue includes all payments (rental + damage charges)
+      let utilizationRevenueDateFilter = '';
+      let utilizationRevenueDateParams = [];
+      if (startDate && endDate) {
+        utilizationRevenueDateFilter = 'AND p.payment_date BETWEEN ? AND ?';
+        utilizationRevenueDateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
+      }
+      
       const [utilizationByType] = await db.execute(
         `SELECT
           e.type as equipment_type,
@@ -2066,46 +2143,63 @@ function registerIPCHandlers() {
           COUNT(DISTINCT CASE WHEN r.status = 'active' THEN r.equipment_id END) as currently_rented,
           COUNT(DISTINCT CASE WHEN r.status = 'returned' THEN r.equipment_id END) as returned_count,
           ROUND(AVG(r.rate_per_hour), 2) as avg_hourly_rate,
-          SUM(CASE WHEN r.status IN ('active', 'returned', 'released', 'overdue') THEN r.total_amount ELSE 0 END) as total_revenue
+          COALESCE(SUM(p.amount), 0) as total_revenue
         FROM equipment e
         LEFT JOIN rentals r ON e.id = r.equipment_id
+        LEFT JOIN payments p ON p.rental_id = r.id ${utilizationRevenueDateFilter}
         ${dateFilter}
         GROUP BY e.type
         ORDER BY total_revenue DESC`,
-        dateParams
+        [...utilizationRevenueDateParams, ...dateParams]
       );
 
-      // Equipment utilization over time (monthly)
+      // Equipment utilization over time (monthly) - revenue includes all payments
+      let utilizationOverTimeDateFilter = '';
+      let utilizationOverTimeDateParams = [];
+      if (startDate && endDate) {
+        utilizationOverTimeDateFilter = 'AND p.payment_date BETWEEN ? AND ?';
+        utilizationOverTimeDateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
+      }
+      
       const [utilizationOverTime] = await db.execute(
         `SELECT
-          DATE_FORMAT(r.created_at, '%Y-%m') as month,
-          COUNT(r.id) as rentals_count,
-          SUM(r.total_amount) as monthly_revenue,
+          DATE_FORMAT(p.payment_date, '%Y-%m') as month,
+          COUNT(DISTINCT p.rental_id) as rentals_count,
+          COALESCE(SUM(p.amount), 0) as monthly_revenue,
           COUNT(DISTINCT r.equipment_id) as unique_equipment_used
-        FROM rentals r
-        ${dateFilter}
-        GROUP BY DATE_FORMAT(r.created_at, '%Y-%m')
+        FROM payments p
+        JOIN rentals r ON p.rental_id = r.id
+        ${utilizationOverTimeDateFilter}
+        GROUP BY DATE_FORMAT(p.payment_date, '%Y-%m')
         ORDER BY month DESC
         LIMIT 12`,
-        dateParams
+        utilizationOverTimeDateParams
       );
 
-      // Most rented equipment
+      // Most rented equipment - revenue includes all payments (rental + damage charges)
+      let mostRentedRevenueDateFilter = '';
+      let mostRentedRevenueDateParams = [];
+      if (startDate && endDate) {
+        mostRentedRevenueDateFilter = 'AND p.payment_date BETWEEN ? AND ?';
+        mostRentedRevenueDateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
+      }
+      
       const [mostRented] = await db.execute(
         `SELECT
           e.name as equipment_name,
           e.type as equipment_type,
-          COUNT(r.id) as rental_count,
-          SUM(r.total_amount) as total_revenue,
+          COUNT(DISTINCT r.id) as rental_count,
+          COALESCE(SUM(p.amount), 0) as total_revenue,
           AVG(r.rate_per_hour) as avg_rate,
           MAX(r.created_at) as last_rental_date
         FROM equipment e
         JOIN rentals r ON e.id = r.equipment_id
+        LEFT JOIN payments p ON p.rental_id = r.id ${mostRentedRevenueDateFilter}
         ${dateFilter}
         GROUP BY e.id, e.name, e.type
         ORDER BY rental_count DESC
         LIMIT 10`,
-        dateParams
+        [...mostRentedRevenueDateParams, ...dateParams]
       );
 
       const endTime = performance.now();
@@ -2137,11 +2231,23 @@ function registerIPCHandlers() {
         dateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
       }
 
-      // Overall income statistics
-      const [overallStats] = await db.execute(`
+      // Overall income statistics - revenue includes all payments (rental + damage charges)
+      let revenueDateFilter = '';
+      let revenueDateParams = [];
+      if (startDate && endDate) {
+        revenueDateFilter = 'WHERE p.payment_date BETWEEN ? AND ?';
+        revenueDateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
+      }
+      
+      const [revenueStats] = await db.execute(`
+        SELECT COALESCE(SUM(p.amount), 0) as total_revenue
+        FROM payments p
+        ${revenueDateFilter}
+      `, revenueDateParams);
+
+      const [overallStatsRows] = await db.execute(`
         SELECT
           COUNT(r.id) as total_rentals,
-          SUM(r.total_amount) as total_revenue,
           AVG(r.total_amount) as avg_rental_value,
           SUM(r.total_paid) as total_paid,
           SUM(r.total_amount - r.total_paid) as total_outstanding,
@@ -2151,37 +2257,65 @@ function registerIPCHandlers() {
         FROM rentals r
         ${dateFilter}
       `, dateParams);
+      
+      // Combine rental stats with payment revenue
+      const overallStats = {
+        ...overallStatsRows[0],
+        total_revenue: parseFloat(revenueStats[0].total_revenue)
+      };
 
-      // Revenue by equipment type
-      const [revenueByType] = await db.execute(`
+      // Revenue by equipment type - includes all payments (rental + damage charges)
+      let revenueByTypeDateFilter = '';
+      let revenueByTypeDateParams = [];
+      if (startDate && endDate) {
+        revenueByTypeDateFilter = 'AND p.payment_date BETWEEN ? AND ?';
+        revenueByTypeDateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
+      }
+      
+      // Build the query with proper date filtering
+      let revenueByTypeQuery = `
         SELECT
           e.type as equipment_type,
-          COUNT(r.id) as rental_count,
-          SUM(r.total_amount) as total_revenue,
+          COUNT(DISTINCT r.id) as rental_count,
+          COALESCE(SUM(p.amount), 0) as total_revenue,
           AVG(r.total_amount) as avg_revenue_per_rental,
           SUM(r.total_paid) as total_paid,
-          ROUND((SUM(r.total_paid) / SUM(r.total_amount)) * 100, 2) as payment_completion_rate
+          ROUND((SUM(r.total_paid) / NULLIF(SUM(r.total_amount), 0)) * 100, 2) as payment_completion_rate
         FROM rentals r
         JOIN equipment e ON r.equipment_id = e.id
-        ${dateFilter}
-        GROUP BY e.type
-        ORDER BY total_revenue DESC
-      `, dateParams);
+        LEFT JOIN payments p ON p.rental_id = r.id ${revenueByTypeDateFilter}
+      `;
+      
+      if (dateFilter) {
+        revenueByTypeQuery += ' ' + dateFilter.replace('WHERE', 'AND');
+      }
+      
+      revenueByTypeQuery += ' GROUP BY e.type ORDER BY total_revenue DESC';
+      
+      const [revenueByType] = await db.execute(revenueByTypeQuery, [...revenueByTypeDateParams, ...dateParams]);
 
-      // Monthly revenue trend
+      // Monthly revenue trend - includes all payments (rental + damage charges)
+      let monthlyRevenueDateFilter = '';
+      let monthlyRevenueDateParams = [];
+      if (startDate && endDate) {
+        monthlyRevenueDateFilter = 'AND p.payment_date BETWEEN ? AND ?';
+        monthlyRevenueDateParams = [startDate + ' 00:00:00', endDate + ' 23:59:59'];
+      }
+      
       const [monthlyRevenue] = await db.execute(`
         SELECT
-          DATE_FORMAT(r.created_at, '%Y-%m') as month,
-          COUNT(r.id) as rental_count,
-          SUM(r.total_amount) as total_revenue,
+          DATE_FORMAT(p.payment_date, '%Y-%m') as month,
+          COUNT(DISTINCT p.rental_id) as rental_count,
+          COALESCE(SUM(p.amount), 0) as total_revenue,
           SUM(r.total_paid) as total_paid,
           AVG(r.total_amount) as avg_rental_value
-        FROM rentals r
-        ${dateFilter}
-        GROUP BY DATE_FORMAT(r.created_at, '%Y-%m')
+        FROM payments p
+        JOIN rentals r ON p.rental_id = r.id
+        ${monthlyRevenueDateFilter}
+        GROUP BY DATE_FORMAT(p.payment_date, '%Y-%m')
         ORDER BY month DESC
         LIMIT 12
-      `, dateParams);
+      `, monthlyRevenueDateParams);
 
       // Payment status breakdown
       const [paymentStatus] = await db.execute(`
@@ -2201,7 +2335,7 @@ function registerIPCHandlers() {
       console.log(`Electron: Income summary report completed in ${endTime - startTime}ms`);
 
       return {
-        overallStats: overallStats[0],
+        overallStats: overallStats,
         revenueByType,
         monthlyRevenue,
         paymentStatus,

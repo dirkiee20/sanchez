@@ -85,17 +85,13 @@ function Payments() {
       }
     });
 
-    // Calculate outstanding amount (total rental amounts minus payments)
-    rentalsData.forEach(rental => {
-      const totalPaid = paymentsData
-        .filter(payment => payment.rental_id === rental.id)
-        .reduce((sum, payment) => sum + parseFloat(payment.amount), 0);
-
-      const outstanding = parseFloat(rental.total_amount) - totalPaid;
-      if (outstanding > 0) {
-        outstandingAmount += outstanding;
-      }
-    });
+    // Calculate outstanding using authoritative rental totals (DB keeps total_paid/current balance)
+    outstandingAmount = rentalsData.reduce((sum, rental) => {
+      const totalAmount = parseFloat(rental.total_amount || 0);
+      const totalPaid = parseFloat(rental.total_paid || 0);
+      const balance = Math.max(0, totalAmount - totalPaid);
+      return sum + balance;
+    }, 0);
 
     setPaymentStats({
       totalPayments,

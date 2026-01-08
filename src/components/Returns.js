@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, AlertTriangle, CheckCircle, XCircle, Edit, Trash2, Search, Package } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { RotateCcw, AlertTriangle, CheckCircle, XCircle, Edit, Trash2, Search, Package, CreditCard } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { returnService } from '../services/returnService';
 import { getIpc } from '../utils/electronUtils';
 import Pagination from './Pagination';
@@ -22,6 +22,7 @@ function Returns() {
   const [selectedRental, setSelectedRental] = useState(null);
   const itemsPerPage = 10;
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Listen for database ready signal
@@ -338,6 +339,13 @@ function Returns() {
           returnItem={editingReturn}
           activeRentals={activeRentals}
           preSelectedRental={selectedRental}
+          onProcessPayment={(rental) => {
+            if (!rental) return;
+            // Navigate to Payments with this rental pre-selected
+            navigate('/payments', { state: { preSelectedRental: rental } });
+            setShowModal(false);
+            setSelectedRental(null);
+          }}
           onClose={() => {
             setShowModal(false);
             setSelectedRental(null);
@@ -465,7 +473,7 @@ function RentalSelectionModal({ rentals, onClose, onSelectRental }) {
 }
 
 // Return Modal Component
-function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, onSave, onSelectRental }) {
+function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, onSave, onSelectRental, onProcessPayment }) {
   const [formData, setFormData] = useState({
     rental_id: returnItem?.rental_id || '',
     return_date: returnItem?.return_date || new Date().toISOString().split('T')[0],
@@ -662,8 +670,8 @@ function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, on
           </div>
 
           {selectedRental && (
-            <div className="bg-secondary-50 p-4 rounded-lg">
-              <h4 className="font-medium text-secondary-900 mb-2">Rental Details</h4>
+            <div className="bg-secondary-50 p-4 rounded-lg space-y-3">
+              <h4 className="font-medium text-secondary-900 mb-1">Rental Details</h4>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p><strong>Client:</strong> {selectedRental.client_name}</p>
@@ -676,11 +684,12 @@ function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, on
                     const totalAmount = parseFloat(selectedRental.total_amount || 0);
                     const totalPaid = parseFloat(selectedRental.total_paid || 0);
                     const balance = Math.max(0, totalAmount - totalPaid);
+                    const isOutstanding = balance > 0.01; // small tolerance
                     return (
                       <>
                         <p><strong>Total Amount:</strong> ₱{totalAmount.toFixed(2)}</p>
                         <p><strong>Total Paid:</strong> ₱{totalPaid.toFixed(2)}</p>
-                        <p className={balance > 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+                        <p className={isOutstanding ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
                           <strong>Balance:</strong> ₱{balance.toFixed(2)}
                         </p>
                         <p>
@@ -689,6 +698,16 @@ function ReturnModal({ returnItem, activeRentals, preSelectedRental, onClose, on
                             ? selectedRental.payment_status.charAt(0).toUpperCase() + selectedRental.payment_status.slice(1)
                             : 'N/A'}
                         </p>
+                        {isOutstanding && typeof onProcessPayment === 'function' && (
+                          <button
+                            type="button"
+                            onClick={() => onProcessPayment(selectedRental)}
+                            className="mt-2 inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+                          >
+                            <CreditCard className="h-4 w-4 mr-1" />
+                            Process Payment
+                          </button>
+                        )}
                       </>
                     );
                   })()}

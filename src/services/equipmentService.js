@@ -49,6 +49,15 @@ class EquipmentService {
       throw error;
     }
   }
+
+  async updateMaintenance(id, quantity, action, userId = null) {
+    try {
+      const ipc = getIpc();
+      return await ipc.invoke('db-update-equipment-maintenance', id, quantity, action, userId);
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

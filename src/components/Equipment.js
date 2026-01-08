@@ -14,6 +14,9 @@ function Equipment() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [databaseReady, setDatabaseReady] = useState(false);
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [maintenanceAction, setMaintenanceAction] = useState(null);
 
   useEffect(() => {
     // Listen for database ready signal
@@ -223,16 +226,46 @@ function Equipment() {
                 <button
                   onClick={() => handleEditEquipment(item)}
                   className="text-primary-600 hover:text-primary-900"
+                  title="Edit Equipment"
                 >
                   <Edit className="h-4 w-4" />
                 </button>
                 {user?.role === 'admin' && (
-                  <button
-                    onClick={() => handleDeleteEquipment(item.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <>
+                    {(item.quantity_available ?? 0) > 0 && (
+                      <button
+                        onClick={() => {
+                          setSelectedEquipment(item);
+                          setMaintenanceAction('send_to_maintenance');
+                          setShowMaintenanceModal(true);
+                        }}
+                        className="text-yellow-600 hover:text-yellow-900"
+                        title="Send to Maintenance"
+                      >
+                        <Wrench className="h-4 w-4" />
+                      </button>
+                    )}
+                    {(item.maintenance_quantity ?? 0) > 0 && (
+                      <button
+                        onClick={() => {
+                          setSelectedEquipment(item);
+                          setMaintenanceAction('mark_as_repaired');
+                          setShowMaintenanceModal(true);
+                        }}
+                        className="text-green-600 hover:text-green-900"
+                        title="Mark as Repaired"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteEquipment(item.id)}
+                      className="text-red-600 hover:text-red-900"
+                      title="Delete Equipment"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -257,6 +290,31 @@ function Equipment() {
             } catch (error) {
               console.error('Error saving equipment:', error);
               alert('Error saving equipment');
+            }
+          }}
+        />
+      )}
+
+      {/* Maintenance Management Modal */}
+      {showMaintenanceModal && selectedEquipment && (
+        <MaintenanceModal
+          equipment={selectedEquipment}
+          action={maintenanceAction}
+          onClose={() => {
+            setShowMaintenanceModal(false);
+            setSelectedEquipment(null);
+            setMaintenanceAction(null);
+          }}
+          onSave={async (quantity) => {
+            try {
+              await equipmentService.updateMaintenance(selectedEquipment.id, quantity, maintenanceAction, user?.id);
+              await loadEquipment(); // Reload the list
+              setShowMaintenanceModal(false);
+              setSelectedEquipment(null);
+              setMaintenanceAction(null);
+            } catch (error) {
+              console.error('Error updating maintenance:', error);
+              alert(error.message || 'Error updating maintenance status');
             }
           }}
         />
@@ -397,6 +455,79 @@ function EquipmentModal({ equipment, onClose, onSave }) {
               className="btn-primary"
             >
               {equipment ? 'Update' : 'Add'} Equipment
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Maintenance Management Modal Component
+function MaintenanceModal({ equipment, action, onClose, onSave }) {
+  const [quantity, setQuantity] = useState(1);
+  const maxQuantity = action === 'send_to_maintenance' 
+    ? (equipment.quantity_available ?? 0)
+    : (equipment.maintenance_quantity ?? 0);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (quantity < 1 || quantity > maxQuantity) {
+      alert(`Please enter a quantity between 1 and ${maxQuantity}`);
+      return;
+    }
+    onSave(quantity);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <h2 className="text-xl font-semibold text-secondary-900 mb-4">
+          {action === 'send_to_maintenance' ? 'Send to Maintenance' : 'Mark as Repaired'}
+        </h2>
+        
+        <div className="mb-4 p-3 bg-secondary-50 rounded-lg">
+          <p className="text-sm font-medium text-secondary-900">{equipment.name}</p>
+          <p className="text-xs text-secondary-600">{equipment.type}</p>
+          <div className="mt-2 text-sm">
+            <p><strong>Available:</strong> {equipment.quantity_available ?? 0}</p>
+            <p><strong>In Maintenance:</strong> {equipment.maintenance_quantity ?? 0}</p>
+            <p><strong>Total:</strong> {equipment.quantity_total ?? 0}</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-secondary-700 mb-1">
+              Quantity to {action === 'send_to_maintenance' ? 'send to maintenance' : 'mark as repaired'}
+            </label>
+            <input
+              type="number"
+              min="1"
+              max={maxQuantity}
+              required
+              className="input-field"
+              value={quantity}
+              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+            />
+            <p className="text-xs text-secondary-500 mt-1">
+              Maximum: {maxQuantity} {action === 'send_to_maintenance' ? 'available' : 'in maintenance'}
+            </p>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className={`btn-primary ${action === 'send_to_maintenance' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700'}`}
+            >
+              {action === 'send_to_maintenance' ? 'Send to Maintenance' : 'Mark as Repaired'}
             </button>
           </div>
         </form>
