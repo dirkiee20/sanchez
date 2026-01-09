@@ -1178,9 +1178,11 @@ function registerIPCHandlers() {
                   [returnData.rental_id, additionalCharges, paymentType, returnData.return_date, damageNotes]
               );
 
-              // Update rental's total_paid and payment_status
+              // Update rental's total_amount, total_paid and payment_status
+              const newTotalAmount = totalAmount + additionalCharges;
+
               let rentalPaymentStatus;
-              if (newTotalPaid >= totalAmount) {
+              if (newTotalPaid >= newTotalAmount) {
                   rentalPaymentStatus = 'paid';
               } else if (newTotalPaid > 0) {
                   rentalPaymentStatus = 'partial';
@@ -1189,8 +1191,8 @@ function registerIPCHandlers() {
               }
 
               await connection.execute(
-                  'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
-                  [newTotalPaid, rentalPaymentStatus, returnData.rental_id]
+                  'UPDATE rentals SET total_amount = ?, total_paid = ?, payment_status = ? WHERE id = ?',
+                  [newTotalAmount, newTotalPaid, rentalPaymentStatus, returnData.rental_id]
               );
           }
   
@@ -1294,9 +1296,11 @@ function registerIPCHandlers() {
             await connection.execute('DELETE FROM payments WHERE id = ?', [existingPayment.id]);
           }
 
-          // Update rental's total_paid and payment_status
+          // Update rental's total_amount, total_paid and payment_status
+          const newTotalAmount = totalAmount + difference;
+
           let rentalPaymentStatus;
-          if (newTotalPaid >= totalAmount) {
+          if (newTotalPaid >= newTotalAmount) {
             rentalPaymentStatus = 'paid';
           } else if (newTotalPaid > 0) {
             rentalPaymentStatus = 'partial';
@@ -1305,7 +1309,7 @@ function registerIPCHandlers() {
           }
 
           await connection.execute(
-            'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
+            'UPDATE rentals SET total_amount = ?, total_paid = ?, payment_status = ? WHERE id = ?',
             [newTotalPaid, rentalPaymentStatus, rentalId]
           );
         } else if (newCharges > 0) {
@@ -1325,9 +1329,11 @@ function registerIPCHandlers() {
             [rentalId, newCharges, paymentType, returnData.return_date, damageNotes]
           );
 
-          // Update rental's total_paid and payment_status
+          // Update rental's total_amount, total_paid and payment_status
+          const newTotalAmount = totalAmount + newCharges;
+
           let rentalPaymentStatus;
-          if (newTotalPaid >= totalAmount) {
+          if (newTotalPaid >= newTotalAmount) {
             rentalPaymentStatus = 'paid';
           } else if (newTotalPaid > 0) {
             rentalPaymentStatus = 'partial';
@@ -1336,8 +1342,8 @@ function registerIPCHandlers() {
           }
 
           await connection.execute(
-            'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
-            [newTotalPaid, rentalPaymentStatus, rentalId]
+            'UPDATE rentals SET total_amount = ?, total_paid = ?, payment_status = ? WHERE id = ?',
+            [newTotalAmount, newTotalPaid, rentalPaymentStatus, rentalId]
           );
         }
       }
@@ -1383,15 +1389,16 @@ function registerIPCHandlers() {
             // Delete the payment
             await connection.execute('DELETE FROM payments WHERE id = ?', [damagePayment.id]);
 
-            // Update rental's total_paid and payment_status
+            // Update rental's total_amount, total_paid and payment_status
             const [rentalRows] = await connection.execute('SELECT total_amount, total_paid FROM rentals WHERE id = ? FOR UPDATE', [returnRecord.rental_id]);
             const rental = rentalRows[0];
             const currentTotalPaid = parseFloat(rental.total_paid || 0);
             const newTotalPaid = Math.max(0, currentTotalPaid - paymentAmount);
             const totalAmount = parseFloat(rental.total_amount);
+            const newTotalAmount = Math.max(0, totalAmount - additionalCharges);
 
             let rentalPaymentStatus;
-            if (newTotalPaid >= totalAmount) {
+            if (newTotalPaid >= newTotalAmount) {
               rentalPaymentStatus = 'paid';
             } else if (newTotalPaid > 0) {
               rentalPaymentStatus = 'partial';
@@ -1400,9 +1407,11 @@ function registerIPCHandlers() {
             }
 
             await connection.execute(
-              'UPDATE rentals SET total_paid = ?, payment_status = ? WHERE id = ?',
-              [newTotalPaid, rentalPaymentStatus, returnRecord.rental_id]
+              'UPDATE rentals SET total_amount = ?, total_paid = ?, payment_status = ? WHERE id = ?',
+              [newTotalAmount, newTotalPaid, rentalPaymentStatus, returnRecord.rental_id]
             );
+
+
           }
         }
 
