@@ -46,9 +46,10 @@ function Payments() {
   const loadData = async (page = 1) => {
     try {
       setLoading(true);
-      const [paymentsResponse, rentalsData] = await Promise.all([
-        paymentService.getAllPayments({ page, limit: itemsPerPage }),
-        rentalService.getAllRentals({ page: 1, limit: 1000 }) // Get all rentals for payment association
+      const [paymentsResponse, allPaymentsResponse, rentalsData] = await Promise.all([
+        paymentService.getAllPayments({ page, limit: itemsPerPage }), // Paginated for table
+        paymentService.getAllPayments({ page: 1, limit: 999999 }), // All payments for stats
+        rentalService.getAllRentals({ page: 1, limit: 999999 }) // Get ALL rentals for accurate outstanding calculation
       ]);
       setPayments(paymentsResponse.data || paymentsResponse);
       setPagination(paymentsResponse.pagination || { totalItems: paymentsResponse.length, totalPages: 1 });
@@ -56,8 +57,8 @@ function Payments() {
       console.log('Payments loaded:', paymentsResponse.data?.length || paymentsResponse.length);
       console.log('Rentals loaded for payments:', rentalsData.data?.length || rentalsData.length);
 
-      // Calculate dynamic payment stats
-      calculatePaymentStats(paymentsResponse.data || paymentsResponse, rentalsData.data || rentalsData);
+      // Calculate dynamic payment stats using ALL payments, not just current page
+      calculatePaymentStats(allPaymentsResponse.data || allPaymentsResponse, rentalsData.data || rentalsData);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

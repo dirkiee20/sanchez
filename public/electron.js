@@ -871,7 +871,7 @@ function registerIPCHandlers() {
 
       // Validate and sanitize parameters
       const validatedPage = Math.max(1, parseInt(page) || 1);
-      const validatedLimit = Math.max(1, Math.min(100, parseInt(limit) || 10)); // Max 100 items per page
+      const validatedLimit = Math.max(1, Math.min(999999, parseInt(limit) || 10)); // Allow large limits for stats calculation
       console.log('Backend: validated page:', validatedPage, 'limit:', validatedLimit);
 
       const offset = (validatedPage - 1) * validatedLimit;
@@ -1626,7 +1626,7 @@ function registerIPCHandlers() {
 
       // Validate and sanitize parameters
       const validatedPage = Math.max(1, parseInt(page) || 1);
-      const validatedLimit = Math.max(1, Math.min(100, parseInt(limit) || 10)); // Max 100 items per page
+      const validatedLimit = Math.max(1, Math.min(999999, parseInt(limit) || 10)); // Allow large limits for stats calculation
       console.log('Electron: validated page:', validatedPage, 'limit:', validatedLimit);
 
       const offset = (validatedPage - 1) * validatedLimit;
